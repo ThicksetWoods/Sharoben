@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F7F6F3">
+<title>しゃろべん記録 v5</title>
+<style>
+:root{
+  --bg:#F7F6F3; --card:#FFFFFF; --ink:#14161A; --sub:#7A8089; --faint:#A8AEB6;
+  --line:#E7E4DE; --line2:#F0EEE9; --black:#16181C;
+  --good:#2E9E6B; --warn:#C98A00; --bad:#D8483C; --blue:#3B6FE0;
+  --tab-h:calc(58px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+  font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+body{padding-bottom:var(--tab-h)}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{border:none;background:none;padding:0;cursor:pointer}
+
+/* ---- layout ---- */
+.wrap{max-width:520px;margin:0 auto;padding:14px 16px 24px}
+.head{display:flex;justify-content:space-between;align-items:flex-start;margin:8px 0 16px}
+.eyebrow{font-size:12.5px;color:var(--sub);letter-spacing:.02em}
+h1{font-size:30px;font-weight:800;margin:2px 0 0;letter-spacing:-.02em}
+.chip{display:inline-flex;align-items:center;gap:5px;background:#EFEDE8;border-radius:999px;
+  padding:6px 12px;font-size:12.5px;color:var(--ink);font-weight:600}
+
+.card{background:var(--card);border-radius:18px;padding:16px 17px;margin-bottom:12px;
+  box-shadow:0 1px 2px rgba(20,22,26,.04)}
+.card h2{font-size:12px;font-weight:700;color:var(--sub);margin:0 0 12px;letter-spacing:.06em}
+.dark{background:var(--black);color:#fff;border-radius:20px;padding:20px 18px;margin-bottom:12px}
+.dark .lab{font-size:12px;color:#8E949C;margin-bottom:8px}
+.dark .big{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.dark .meta{font-size:12.5px;color:#9AA0A8;margin-top:8px}
+.dark .btn{display:block;width:100%;margin-top:16px;background:#fff;color:var(--black);
+  border-radius:13px;padding:14px 0;font-size:15px;font-weight:700;text-align:center}
+
+/* norma ring */
+.ring{display:flex;align-items:center;gap:16px}
+.ring svg{flex:none}
+.ring .t1{font-size:16px;font-weight:700}
+.ring .t2{font-size:13px;color:var(--sub);margin-top:2px}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.tile{background:var(--card);border-radius:14px;padding:12px 10px;text-align:center;
+  box-shadow:0 1px 2px rgba(20,22,26,.04)}
+.tile .v{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.tile .u{font-size:11px;font-weight:600;color:var(--sub);margin-left:1px}
+.tile .k{font-size:10.5px;color:var(--faint);margin-top:3px}
+
+/* rows */
+.row{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid var(--line2)}
+.row:last-child{border-bottom:none}
+.row .nm{flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .sm{font-size:11.5px;color:var(--faint)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.pill{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--sub);white-space:nowrap}
+.pill.b{border-color:var(--black);color:var(--black);font-weight:600}
+
+/* bars */
+.bar{height:6px;border-radius:3px;background:#EDEBE6;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:3px}
+.gauge{position:relative;height:13px;border-radius:7px;background:#EDEBE6;overflow:hidden}
+.gauge>i{position:absolute;left:0;top:0;bottom:0;border-radius:7px}
+.gauge>b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.75}
+
+/* forms */
+label.f{display:block;margin-bottom:12px}
+label.f>span{display:block;font-size:12px;color:var(--sub);margin-bottom:5px}
+.inp{width:100%;background:#FBFAF8;border:1px solid var(--line);border-radius:11px;
+  padding:11px 12px;font-size:15px;outline:none;appearance:none}
+.inp:focus{border-color:var(--black);background:#fff}
+select.inp{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%237A8089' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center;padding-right:32px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.primary{width:100%;background:var(--black);color:#fff;border-radius:13px;padding:15px 0;
+  font-size:15.5px;font-weight:700;text-align:center}
+.primary:disabled{background:#D5D2CC;color:#fff}
+.ghost{background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 14px;
+  font-size:13.5px;font-weight:600}
+.seg{display:flex;background:#EDEBE6;border-radius:11px;padding:3px;gap:2px}
+.seg button{flex:1;padding:9px 0;border-radius:9px;font-size:13px;font-weight:600;color:var(--sub)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.toggle{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px;font-size:14px;
+  font-weight:600;color:var(--sub);background:#FBFAF8;text-align:center}
+.toggle.on{background:var(--black);border-color:var(--black);color:#fff}
+.choice{display:block;width:100%;text-align:left;border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;margin-bottom:7px;background:#fff;font-size:14.5px}
+.choice.on{border-color:var(--black);border-width:1.5px;background:#FBFAF8;font-weight:700}
+.choice .s{float:right;font-size:12px;color:var(--faint);font-weight:400}
+.x{color:var(--faint);font-size:19px;padding:0 4px;line-height:1}
+.add{border:1px dashed var(--line);border-radius:11px;padding:11px 0;width:100%;
+  font-size:13.5px;font-weight:600;color:var(--sub)}
+textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
+.hint{font-size:11.5px;color:var(--faint);line-height:1.65;margin-top:9px}
+.empty{text-align:center;color:var(--faint);font-size:13px;padding:22px 0}
+.warnbox{background:#FDF3E7;border:1px solid #F0D9B4;border-radius:12px;padding:12px 14px;
+  font-size:13px;margin-bottom:12px;line-height:1.6}
+.okbox{background:#EDF6F1;border:1px solid #C6E4D5;border-radius:12px;padding:12px 14px;
+  font-size:13px;margin-bottom:12px}
+
+/* heatmap */
+.hm{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.hmM{flex:none}
+.hmM .lb{font-size:9.5px;color:var(--faint);height:13px}
+.hmG{display:grid;grid-template-columns:repeat(7,9px);grid-auto-rows:9px;gap:2px}
+.hmG i{border-radius:2px;display:block}
+
+/* tabbar */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;
+  background:rgba(247,246,243,.94);backdrop-filter:saturate(180%) blur(14px);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabbar button{flex:1;padding:9px 0 7px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--faint);font-size:10px;font-weight:600}
+.tabbar button.on{color:var(--ink)}
+.tabbar svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* sheet */
+.sheetbg{position:fixed;inset:0;background:rgba(20,22,26,.4);z-index:60;display:flex;align-items:flex-end}
+.sheet{width:100%;max-width:520px;margin:0 auto;background:var(--bg);border-radius:20px 20px 0 0;
+  padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto}
+.sheet h3{font-size:17px;font-weight:800;margin:0 0 14px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="tabbar" id="tabbar"></div>
+<script>
+/* =====================================================================
+   しゃろべん記録 v5.00  —  mobile / 計画特化
+   依存ライブラリなし・完全オフライン・単一HTML
+   ===================================================================== */
+var SEED = {"config":{"targetRate":85,"examDate":"2027-08-22","startDate":"2026-08-24","warnRate":65},"subjects":[{"code":"01","name":"労基"},{"code":"02","name":"安衛"},{"code":"03","name":"労災"},{"code":"04","name":"徴収"},{"code":"05","name":"雇用"},{"code":"06","name":"労一"},{"code":"07","name":"健保"},{"code":"08","name":"国年"},{"code":"09","name":"厚年"},{"code":"10","name":"社一"},{"code":"99","name":"その他"}],"materials":[{"id":"01_秒トレ","subjectCode":"01","type":"秒トレ","targetLaps":2,"lap1Problems":"117","auditThresholdPct":"50"},{"id":"01_トレ問","subjectCode":"01","type":"トレ問","targetLaps":1,"lap1Problems":"295"},{"id":"01_テキスト","subjectCode":"01","type":"テキスト","targetLaps":1,"lap1Problems":"","auditThresholdPct":"50"},{"id":"02_秒トレ","subjectCode":"02","type":"秒トレ","targetLaps":2,"lap1Problems":"124","auditThresholdPct":"50"},{"id":"02_トレ問","subjectCode":"02","type":"トレ問","targetLaps":1,"lap1Problems":"103"},{"id":"02_テキスト","subjectCode":"02","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"03_秒トレ","subjectCode":"03","type":"秒トレ","targetLaps":2,"lap1Problems":"110","auditThresholdPct":"50"},{"id":"03_トレ問","subjectCode":"03","type":"トレ問","targetLaps":1,"lap1Problems":"170"},{"id":"03_テキスト","subjectCode":"03","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"04_秒トレ","subjectCode":"04","type":"秒トレ","targetLaps":2,"lap1Problems":"103","auditThresholdPct":"50"},{"id":"04_トレ問","subjectCode":"04","type":"トレ問","targetLaps":1,"lap1Problems":"239"},{"id":"04_テキスト","subjectCode":"04","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"05_秒トレ","subjectCode":"05","type":"秒トレ","targetLaps":2,"lap1Problems":"141","auditThresholdPct":"50"},{"id":"05_トレ問","subjectCode":"05","type":"トレ問","targetLaps":1,"lap1Problems":"283"},{"id":"05_テキスト","subjectCode":"05","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"06_秒トレ","subjectCode":"06","type":"秒トレ","targetLaps":2,"lap1Problems":"332","auditThresholdPct":"50"},{"id":"06_トレ問","subjectCode":"06","type":"トレ問","targetLaps":1,"lap1Problems":"112"},{"id":"06_テキスト","subjectCode":"06","type":"テキスト","targetLaps":1,"lap1Problems":"","auditThresholdPct":"50"},{"id":"07_秒トレ","subjectCode":"07","type":"秒トレ","targetLaps":2,"lap1Problems":"131","auditThresholdPct":"50"},{"id":"07_トレ問","subjectCode":"07","type":"トレ問","targetLaps":1,"lap1Problems":"362"},{"id":"07_テキスト","subjectCode":"07","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"08_秒トレ","subjectCode":"08","type":"秒トレ","targetLaps":2,"lap1Problems":"120","auditThresholdPct":"50"},{"id":"08_トレ問","subjectCode":"08","type":"トレ問","targetLaps":1,"lap1Problems":"325"},{"id":"08_テキスト","subjectCode":"08","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"09_秒トレ","subjectCode":"09","type":"秒トレ","targetLaps":2,"lap1Problems":"121","auditThresholdPct":"50"},{"id":"09_トレ問","subjectCode":"09","type":"トレ問","targetLaps":1,"lap1Problems":"303"},{"id":"09_テキスト","subjectCode":"09","type":"テキスト","targetLaps":1,"lap1Problems":"","auditThresholdPct":"70"},{"id":"10_秒トレ","subjectCode":"10","type":"秒トレ","targetLaps":2,"lap1Problems":"143","auditThresholdPct":"50"},{"id":"10_トレ問","subjectCode":"10","type":"トレ問","targetLaps":1,"lap1Problems":"250"},{"id":"10_テキスト","subjectCode":"10","type":"テキスト","targetLaps":1,"lap1Problems":""},{"id":"99_秒トレ","subjectCode":"99","type":"秒トレ","targetLaps":2,"lap1Problems":"189","auditThresholdPct":"50"},{"id":"99_トレ問","subjectCode":"99","type":"トレ問","targetLaps":1,"lap1Problems":""},{"id":"99_テキスト","subjectCode":"99","type":"テキスト","targetLaps":1,"lap1Problems":""}],"milestones":[{"id":"s7k1re92","name":"第1MS","date":"2026-10-31"},{"id":"emav817e","name":"第2MS","date":"2026-12-31"},{"id":"3pgif2qr","name":"第3MS","date":"2027-02-28"},{"id":"e7gy7dvm","name":"第4MS","date":"2027-03-31"},{"id":"m3rijiqn","name":"第5MS","date":"2027-05-31"},{"id":"c2z2tp47","name":"第6MS","date":"2027-06-30"},{"id":"hcpa7bvj","name":"第7MS","date":"2027-08-21"}],"records":[{"date":"2026-08-23","subjectCode":"99","type":"テキスト","lap":6,"problems":0,"wrong":0,"minutes":80,"done":false,"noPredict":false,"memo":"","id":"x9zt1n58"},{"date":"2026-08-22","subjectCode":"99","type":"テキスト","lap":6,"problems":0,"wrong":0,"minutes":39,"done":false,"noPredict":false,"memo":"","id":"ws7hht71"},{"date":"2026-08-21","subjectCode":"99","type":"テキスト","lap":6,"problems":0,"wrong":0,"minutes":53,"done":false,"noPredict":false,"memo":"","id":"edp8ey1l"},{"date":"2026-08-21","subjectCode":"04","type":"秒トレ","lap":7,"problems":31,"wrong":27,"minutes":38,"done":true,"noPredict":true,"memo":"","correct":77,"id":"9cyxpdn9"},{"date":"2026-08-20","subjectCode":"04","type":"秒トレ","lap":7,"problems":73,"wrong":0,"minutes":84,"done":false,"noPredict":false,"memo":"","id":"rb611f21"},{"date":"2026-08-19","subjectCode":"03","type":"秒トレ","lap":9,"problems":112,"wrong":24,"minutes":136,"done":true,"noPredict":true,"memo":"","correct":88,"id":"o04taoct"},{"date":"2026-08-19","subjectCode":"02","type":"秒トレ","lap":7,"problems":65,"wrong":73,"minutes":88,"done":true,"noPredict":true,"memo":"","correct":54,"id":"bxhrvr3s"},{"date":"2026-08-18","subjectCode":"02","type":"秒トレ","lap":7,"problems":62,"wrong":0,"minutes":39,"done":false,"noPredict":false,"memo":"","id":"ujmzyfrk"},{"date":"2026-08-18","subjectCode":"01","type":"秒トレ","lap":9,"problems":118,"wrong":14,"minutes":74,"done":true,"noPredict":true,"memo":"","correct":104,"id":"9200v67d"},{"date":"2026-08-16","subjectCode":"99","type":"テキスト","lap":6,"problems":0,"wrong":0,"minutes":240,"done":false,"noPredict":false,"memo":"","id":"hkn34tfm"},{"date":"2026-08-15","subjectCode":"99","type":"テキスト","lap":6,"problems":0,"wrong":0,"minutes":180,"done":false,"noPredict":false,"memo":"","id":"rcyamty8"},{"date":"2026-08-17","subjectCode":"05","type":"トレ問","lap":3,"problems":35,"wrong":0,"minutes":40,"done":false,"noPredict":false,"memo":"","id":"cq2nv1bk"},{"date":"2026-08-17","subjectCode":"07","type":"トレ問","lap":4,"problems":12,"wrong":51,"minutes":34,"done":true,"noPredict":false,"memo":"","id":"co9wlkv8","correct":114,"lapTotal":null},{"date":"2026-08-16","subjectCode":"07","type":"トレ問","lap":4,"problems":33,"wrong":0,"minutes":63,"done":false,"noPredict":false,"memo":"","id":"fd5e4p1h","correct":null,"lapTotal":null},{"date":"2026-08-13","subjectCode":"07","type":"トレ問","lap":4,"problems":24,"wrong":0,"minutes":149,"done":false,"noPredict":false,"id":"usb62paw"},{"date":"2026-08-12","subjectCode":"07","type":"トレ問","lap":4,"problems":43,"wrong":0,"minutes":73,"done":false,"noPredict":false,"id":"kleewzqy","correct":null},{"date":"2026-08-11","subjectCode":"07","type":"トレ問","lap":4,"problems":43,"wrong":0,"minutes":99,"done":false,"noPredict":false,"id":"afg6psyr","correct":null},{"date":"2026-08-07","subjectCode":"07","type":"トレ問","lap":4,"problems":10,"wrong":0,"minutes":26,"done":false,"noPredict":false,"id":"nj7e1074"},{"date":"2026-08-07","subjectCode":"09","type":"秒トレ","lap":2,"problems":29,"wrong":18,"minutes":35,"done":true,"noPredict":true,"id":"rboly5vz","correct":105},{"date":"2026-08-06","subjectCode":"09","type":"秒トレ","lap":2,"problems":94,"wrong":0,"minutes":110,"done":false,"noPredict":false,"id":"mh385rz8"},{"date":"2026-08-05","subjectCode":"04","type":"トレ問","lap":2,"problems":83,"wrong":47,"minutes":99,"done":true,"noPredict":false,"id":"1v2budqf","correct":102},{"date":"2026-08-04","subjectCode":"04","type":"トレ問","lap":2,"problems":37,"wrong":0,"minutes":69,"done":false,"noPredict":false,"id":"v7fzggnq"},{"date":"2026-08-02","subjectCode":"04","type":"トレ問","lap":2,"problems":29,"wrong":0,"minutes":35,"done":false,"noPredict":false,"id":"sksw84ux"},{"date":"2026-08-02","subjectCode":"99","type":"テキスト","lap":3,"problems":0,"wrong":0,"minutes":380,"done":true,"noPredict":false,"id":"vst26b15"},{"date":"2026-08-02","subjectCode":"03","type":"秒トレ","lap":8,"problems":34,"wrong":34,"minutes":27,"done":true,"noPredict":false,"id":"tmejqoil","correct":113},{"date":"2026-08-01","subjectCode":"04","type":"秒トレ","lap":6,"problems":54,"wrong":26,"minutes":43,"done":true,"noPredict":false,"id":"6xzinyqy","correct":28},{"date":"2026-08-01","subjectCode":"03","type":"秒トレ","lap":8,"problems":77,"wrong":0,"minutes":56,"done":false,"noPredict":false,"id":"mepimxx0"},{"date":"2026-07-31","subjectCode":"03","type":"秒トレ","lap":8,"problems":36,"wrong":0,"minutes":29,"done":false,"noPredict":false,"id":"sxlpm3jq"},{"date":"2026-07-31","subjectCode":"05","type":"秒トレ","lap":8,"problems":54,"wrong":38,"minutes":51,"done":true,"noPredict":false,"id":"9ykquz7h","correct":37},{"date":"2026-07-30","subjectCode":"05","type":"秒トレ","lap":8,"problems":21,"wrong":0,"minutes":21,"done":false,"noPredict":false,"id":"710nvx6c"},{"date":"2026-07-30","subjectCode":"08","type":"秒トレ","lap":7,"problems":45,"wrong":14,"minutes":58,"done":true,"noPredict":false,"id":"qq5s23jm","correct":31},{"date":"2026-07-29","subjectCode":"08","type":"秒トレ","lap":6,"problems":38,"wrong":13,"minutes":40,"done":true,"noPredict":false,"id":"x0bhbojm","correct":25},{"date":"2026-07-29","subjectCode":"07","type":"秒トレ","lap":6,"problems":36,"wrong":13,"minutes":20,"done":true,"noPredict":false,"id":"im50qbkj","correct":23},{"date":"2026-07-29","subjectCode":"02","type":"秒トレ","lap":5,"problems":24,"wrong":7,"minutes":32,"done":true,"noPredict":false,"id":"rvrnstgf","correct":30},{"date":"2026-07-28","subjectCode":"02","type":"秒トレ","lap":5,"problems":13,"wrong":0,"minutes":29,"done":false,"noPredict":false,"id":"9jtjz0rr"},{"date":"2026-07-26","subjectCode":"99","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":260,"done":true,"noPredict":true,"id":"r42uwd31"},{"date":"2026-07-26","subjectCode":"01","type":"秒トレ","lap":7,"problems":33,"wrong":13,"minutes":24,"done":true,"noPredict":false,"id":"isqoiyk5","correct":20},{"date":"2026-07-26","subjectCode":"10","type":"秒トレ","lap":4,"problems":18,"wrong":27,"minutes":9,"done":true,"noPredict":false,"id":"505mnrto","correct":39},{"date":"2026-07-25","subjectCode":"10","type":"秒トレ","lap":4,"problems":48,"wrong":0,"minutes":37,"done":false,"noPredict":false,"id":"jozfycu2"},{"date":"2026-07-25","subjectCode":"06","type":"秒トレ","lap":10,"problems":20,"wrong":40,"minutes":26,"done":true,"noPredict":false,"id":"kfu68nln","correct":97},{"date":"2026-07-23","subjectCode":"06","type":"秒トレ","lap":10,"problems":117,"wrong":0,"minutes":103,"done":false,"noPredict":false,"id":"ekrfu3zi"},{"date":"2026-07-23","subjectCode":"04","type":"秒トレ","lap":5,"problems":18,"wrong":32,"minutes":17,"done":true,"noPredict":false,"id":"vk03jlud","correct":22},{"date":"2026-07-22","subjectCode":"04","type":"秒トレ","lap":5,"problems":36,"wrong":0,"minutes":53,"done":false,"noPredict":false,"id":"pj9rkuz0"},{"date":"2026-07-22","subjectCode":"03","type":"秒トレ","lap":7,"problems":42,"wrong":23,"minutes":57,"done":true,"noPredict":false,"id":"nl5o77c6","correct":25},{"date":"2026-07-21","subjectCode":"03","type":"秒トレ","lap":7,"problems":6,"wrong":0,"minutes":8,"done":false,"noPredict":false,"id":"0kozw2gp"},{"date":"2026-07-21","subjectCode":"05","type":"秒トレ","lap":7,"problems":11,"wrong":24,"minutes":23,"done":true,"noPredict":false,"id":"v1ih01l8","correct":53},{"date":"2026-07-19","subjectCode":"05","type":"秒トレ","lap":7,"problems":48,"wrong":0,"minutes":88,"done":false,"noPredict":false,"id":"g1b6ya09"},{"date":"2026-07-18","subjectCode":"05","type":"秒トレ","lap":7,"problems":18,"wrong":0,"minutes":33,"done":false,"noPredict":false,"id":"e2vfvhd1"},{"date":"2026-07-17","subjectCode":"08","type":"秒トレ","lap":5,"problems":34,"wrong":12,"minutes":75,"done":true,"noPredict":false,"id":"j0g8tche","correct":22},{"date":"2026-07-16","subjectCode":"08","type":"秒トレ","lap":4,"problems":52,"wrong":17,"minutes":49,"done":true,"id":"a4i8dzt6","correct":35},{"date":"2026-07-16","subjectCode":"07","type":"秒トレ","lap":5,"problems":37,"wrong":16,"minutes":24,"done":true,"id":"76no2844","correct":21},{"date":"2026-07-16","subjectCode":"02","type":"秒トレ","lap":4,"problems":37,"wrong":12,"minutes":30,"done":true,"id":"2p6s2x4g","correct":25},{"date":"2026-07-16","subjectCode":"01","type":"秒トレ","lap":6,"problems":37,"wrong":14,"minutes":32,"done":true,"id":"e0m9idn3","correct":23},{"date":"2026-07-15","subjectCode":"10","type":"秒トレ","lap":3,"problems":69,"wrong":23,"minutes":54,"done":true,"id":"ymz79akw","correct":46},{"date":"2026-07-15","subjectCode":"06","type":"秒トレ","lap":9,"problems":65,"wrong":36,"minutes":69,"done":true,"id":"c69svt5h","correct":113},{"date":"2026-07-14","subjectCode":"06","type":"秒トレ","lap":9,"problems":84,"wrong":0,"minutes":90,"done":false,"id":"v3q0lnb2"},{"date":"2026-07-14","subjectCode":"04","type":"秒トレ","lap":4,"problems":56,"wrong":34,"minutes":43,"done":true,"id":"b8nov5ms","correct":22},{"date":"2026-07-14","subjectCode":"03","type":"秒トレ","lap":6,"problems":53,"wrong":28,"minutes":67,"done":true,"id":"0duiayba","correct":25},{"date":"2026-07-13","subjectCode":"05","type":"秒トレ","lap":6,"problems":70,"wrong":24,"minutes":78,"done":true,"id":"3tqxii7w","correct":46},{"date":"2026-07-12","subjectCode":"10","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":380,"done":true,"id":"n121cb1h"},{"date":"2026-07-11","subjectCode":"05","type":"秒トレ","lap":1,"problems":12,"wrong":0,"minutes":22,"done":false,"id":"vx6xo866"},{"date":"2026-07-10","subjectCode":"09","type":"秒トレ","lap":1,"problems":55,"wrong":22,"minutes":91,"done":true,"id":"znmhyhie","correct":33},{"date":"2026-07-09","subjectCode":"08","type":"秒トレ","lap":1,"problems":51,"wrong":26,"minutes":57,"done":true,"id":"oidkh05i","correct":25},{"date":"2026-07-08","subjectCode":"07","type":"秒トレ","lap":1,"problems":37,"wrong":20,"minutes":51,"done":true,"id":"cdjzwdfb","correct":17},{"date":"2026-07-08","subjectCode":"02","type":"秒トレ","lap":1,"problems":117,"wrong":52,"minutes":30,"done":true,"id":"d7h0k2uf","correct":65},{"date":"2026-07-08","subjectCode":"01","type":"秒トレ","lap":1,"problems":40,"wrong":15,"minutes":26,"done":true,"id":"rj0z9kuc","correct":25},{"date":"2026-07-07","subjectCode":"06","type":"秒トレ","lap":1,"problems":82,"wrong":65,"minutes":60,"done":true,"id":"33nx9fpz","correct":156},{"date":"2026-07-04","subjectCode":"06","type":"秒トレ","lap":1,"problems":139,"wrong":0,"minutes":78,"done":false,"id":"a6lv2on5"},{"date":"2025-09-30","subjectCode":"02","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":90,"done":true,"id":"hmp34deb"},{"date":"2025-09-30","subjectCode":"07","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":1268,"done":true,"id":"1ag9upcr"},{"date":"2025-09-30","subjectCode":"01","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":336,"done":true,"id":"l96qriyp"},{"date":"2025-09-30","subjectCode":"05","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":1765,"done":true,"id":"sl7spn5v"},{"date":"2025-10-31","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":121,"done":false,"id":"h9f7tkii"},{"date":"2025-10-31","subjectCode":"09","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":797,"done":true,"id":"awp3nt6p"},{"date":"2025-10-31","subjectCode":"05","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":102,"done":true,"id":"h18ysb77"},{"date":"2025-10-31","subjectCode":"03","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":352,"done":true,"id":"dtv877zk"},{"date":"2025-10-31","subjectCode":"02","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":304,"done":true,"id":"zrtponqd"},{"date":"2025-10-31","subjectCode":"03","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":600,"done":true,"id":"bz5kym7j"},{"date":"2025-10-31","subjectCode":"08","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":745,"done":true,"id":"jlorodsy"},{"date":"2025-10-31","subjectCode":"04","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":853,"done":true,"id":"lh1ex0a3"},{"date":"2025-10-31","subjectCode":"01","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":216,"done":false,"id":"u9w95gc5"},{"date":"2025-11-30","subjectCode":"10","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":648,"done":true,"id":"gtajmjq6"},{"date":"2025-11-30","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":575,"done":false,"id":"gqbtg9ro"},{"date":"2025-11-30","subjectCode":"09","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":442,"done":true,"id":"sqykw44l"},{"date":"2025-11-30","subjectCode":"06","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":702,"done":true,"id":"9vwl46fh"},{"date":"2025-11-30","subjectCode":"01","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":321,"done":true,"id":"nqgxlkoe"},{"date":"2025-11-30","subjectCode":"07","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":415,"done":true,"id":"1u501fpp"},{"date":"2025-11-30","subjectCode":"08","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":47,"done":true,"id":"b5xdyt2g"},{"date":"2025-11-30","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":800,"done":true,"id":"2kbdcf6d"},{"date":"2025-12-31","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":810,"done":true,"id":"lq1bpl5n"},{"date":"2025-12-31","subjectCode":"05","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":879,"done":true,"id":"ja7dagcu"},{"date":"2025-12-31","subjectCode":"08","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":497,"done":true,"id":"3uzd9uvc"},{"date":"2025-12-31","subjectCode":"07","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":218,"done":false,"id":"t5u8hdvj"},{"date":"2025-12-31","subjectCode":"01","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":266,"done":true,"id":"3jvq8wqb"},{"date":"2026-01-31","subjectCode":"09","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":1264,"done":true,"id":"t21c0hnz"},{"date":"2026-01-31","subjectCode":"05","type":"トレ問","lap":2,"problems":0,"wrong":0,"minutes":1057,"done":false,"id":"8djlv2am"},{"date":"2026-01-31","subjectCode":"03","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":1508,"done":true,"id":"zxxlucis"},{"date":"2026-01-31","subjectCode":"99","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":72,"done":false,"id":"bqgp1vh9"},{"date":"2026-01-31","subjectCode":"07","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":207,"done":true,"id":"5425bauf"},{"date":"2026-01-31","subjectCode":"08","type":"トレ問","lap":2,"problems":0,"wrong":0,"minutes":137,"done":true,"id":"fgs0znot"},{"date":"2026-01-31","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":62,"done":false,"id":"p7bpbzsg"},{"date":"2026-02-28","subjectCode":"05","type":"トレ問","lap":2,"problems":0,"wrong":0,"minutes":627,"done":true,"id":"z3adn6b8"},{"date":"2026-02-28","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":566,"done":false,"id":"lut53dsg"},{"date":"2026-02-28","subjectCode":"02","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":646,"done":true,"id":"486e3t9k"},{"date":"2026-02-28","subjectCode":"10","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":1631,"done":true,"id":"k3f8ir4n"},{"date":"2026-02-28","subjectCode":"99","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":314,"done":false,"id":"0462qj4b"},{"date":"2026-02-28","subjectCode":"04","type":"トレ問","lap":1,"problems":0,"wrong":0,"minutes":164,"done":true,"id":"2v8dgxza"},{"date":"2026-02-28","subjectCode":"99","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":143,"done":false,"id":"8oiru2t7"},{"date":"2026-03-31","subjectCode":"99","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":211,"done":false,"id":"sb9llauh"},{"date":"2026-03-31","subjectCode":"99","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":58,"done":false,"id":"efdh7w6q"},{"date":"2026-03-31","subjectCode":"04","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":220,"done":true,"id":"4k94yzxx"},{"date":"2026-03-31","subjectCode":"02","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":190,"done":true,"id":"spv3fmal"},{"date":"2026-03-31","subjectCode":"03","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":300,"done":true,"id":"28myf7mm"},{"date":"2026-03-31","subjectCode":"05","type":"秒トレ","lap":1,"problems":0,"wrong":2,"minutes":119,"done":true,"id":"d5fn2suo","correct":10},{"date":"2026-03-31","subjectCode":"03","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":326,"done":true,"id":"2c6m1dkz"},{"date":"2026-03-31","subjectCode":"06","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":1169,"done":true,"id":"yqg337ru"},{"date":"2026-03-31","subjectCode":"07","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":238,"done":true,"id":"ytftrmm3"},{"date":"2026-04-30","subjectCode":"05","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":1220,"done":true,"id":"m2ymio94"},{"date":"2026-04-30","subjectCode":"07","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":1053,"done":true,"id":"h8gq1xy7"},{"date":"2026-04-30","subjectCode":"01","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":300,"done":true,"id":"dhczlfa9"},{"date":"2026-04-30","subjectCode":"04","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":134,"done":true,"id":"duwbkr9g"},{"date":"2026-04-30","subjectCode":"01","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":307,"done":true,"id":"lry36vye"},{"date":"2026-04-30","subjectCode":"99","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":240,"done":false,"id":"up8llvpb"},{"date":"2026-04-30","subjectCode":"02","type":"秒トレ","lap":2,"problems":0,"wrong":0,"minutes":231,"done":true,"id":"mjoh7xci"},{"date":"2026-05-31","subjectCode":"01","type":"秒トレ","lap":3,"problems":0,"wrong":0,"minutes":302,"done":true,"id":"jc1y45gt"},{"date":"2026-05-31","subjectCode":"01","type":"秒トレ","lap":4,"problems":0,"wrong":15,"minutes":300,"done":true,"id":"3aznn2yb","correct":52},{"date":"2026-05-31","subjectCode":"04","type":"秒トレ","lap":3,"problems":0,"wrong":0,"minutes":333,"done":true,"id":"wp505nt9"},{"date":"2026-05-31","subjectCode":"02","type":"秒トレ","lap":3,"problems":0,"wrong":0,"minutes":298,"done":true,"id":"c04lhbp8"},{"date":"2026-05-31","subjectCode":"08","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":985,"done":true,"id":"xlpcm8gc"},{"date":"2026-05-31","subjectCode":"09","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":426,"done":true,"id":"tq0lj9y9"},{"date":"2026-06-02","subjectCode":"09","type":"トレ問","lap":1,"problems":41,"wrong":0,"minutes":74,"done":false,"id":"ojk80x4f"},{"date":"2026-06-03","subjectCode":"09","type":"トレ問","lap":1,"problems":11,"wrong":0,"minutes":38,"done":true,"id":"610t9npt","correct":52},{"date":"2026-06-04","subjectCode":"09","type":"トレ問","lap":2,"problems":25,"wrong":0,"minutes":98,"done":false,"id":"zb7e7qyc"},{"date":"2026-06-05","subjectCode":"09","type":"トレ問","lap":2,"problems":65,"wrong":0,"minutes":86,"done":true,"id":"ktmnie3r","correct":90},{"date":"2026-06-06","subjectCode":"08","type":"秒トレ","lap":2,"problems":122,"wrong":21,"minutes":62,"done":true,"id":"0lzt3h8i","correct":101},{"date":"2026-06-07","subjectCode":"08","type":"秒トレ","lap":3,"problems":120,"wrong":18,"minutes":83,"done":true,"id":"hh8bn7oo","correct":102},{"date":"2026-06-08","subjectCode":"07","type":"秒トレ","lap":3,"problems":9,"wrong":0,"minutes":15,"done":false,"id":"p96xwgyn"},{"date":"2026-06-09","subjectCode":"99","type":"秒トレ","lap":1,"problems":0,"wrong":0,"minutes":31,"done":false,"id":"d2hvd0wr"},{"date":"2026-06-09","subjectCode":"07","type":"秒トレ","lap":3,"problems":85,"wrong":0,"minutes":110,"done":true,"id":"38gwq9ia"},{"date":"2026-06-10","subjectCode":"05","type":"秒トレ","lap":3,"problems":0,"wrong":0,"minutes":84,"done":true,"id":"uht9rnrz"},{"date":"2026-06-10","subjectCode":"07","type":"秒トレ","lap":3,"problems":97,"wrong":49,"minutes":24,"done":true,"id":"ar43wje6","correct":142},{"date":"2026-06-11","subjectCode":"05","type":"秒トレ","lap":3,"problems":51,"wrong":0,"minutes":64,"done":false,"id":"ijfd0vqx"},{"date":"2026-06-12","subjectCode":"05","type":"秒トレ","lap":3,"problems":5,"wrong":20,"minutes":30,"done":true,"id":"05yvovqp","correct":36},{"date":"2026-06-14","subjectCode":"05","type":"秒トレ","lap":4,"problems":29,"wrong":15,"minutes":37,"done":true,"id":"d6fifxpm","correct":14},{"date":"2026-06-14","subjectCode":"99","type":"テキスト","lap":1,"problems":0,"wrong":0,"minutes":380,"done":true,"id":"9qrv6xlw"},{"date":"2026-06-15","subjectCode":"05","type":"秒トレ","lap":5,"problems":141,"wrong":30,"minutes":75,"done":true,"id":"2cbd3xps","correct":111},{"date":"2026-06-16","subjectCode":"03","type":"秒トレ","lap":3,"problems":88,"wrong":0,"minutes":82,"done":false,"id":"dz5yf42w"},{"date":"2026-06-17","subjectCode":"03","type":"秒トレ","lap":4,"problems":28,"wrong":0,"minutes":24,"done":false,"id":"rwt1nuj7"},{"date":"2026-06-17","subjectCode":"03","type":"秒トレ","lap":3,"problems":22,"wrong":46,"minutes":14,"done":true,"id":"88ihapsc","correct":64},{"date":"2026-06-18","subjectCode":"03","type":"秒トレ","lap":4,"problems":50,"wrong":25,"minutes":30,"done":true,"id":"x04gzsop","correct":53},{"date":"2026-06-19","subjectCode":"01","type":"秒トレ","lap":4,"problems":67,"wrong":0,"minutes":29,"done":false,"id":"bd532q4u"},{"date":"2026-06-20","subjectCode":"01","type":"秒トレ","lap":5,"problems":50,"wrong":13,"minutes":23,"done":true,"id":"9no46uu0","correct":37},{"date":"2026-06-20","subjectCode":"03","type":"秒トレ","lap":5,"problems":140,"wrong":19,"minutes":53,"done":true,"id":"togixav7","correct":121},{"date":"2026-06-23","subjectCode":"07","type":"トレ問","lap":2,"problems":55,"wrong":0,"minutes":83,"done":false,"id":"gti97xnk"},{"date":"2026-06-24","subjectCode":"07","type":"トレ問","lap":2,"problems":34,"wrong":0,"minutes":59,"done":false,"id":"080rzmoh"},{"date":"2026-06-25","subjectCode":"07","type":"トレ問","lap":2,"problems":27,"wrong":42,"minutes":57,"done":true,"id":"pmpqknic","correct":74},{"date":"2026-06-26","subjectCode":"07","type":"トレ問","lap":3,"problems":51,"wrong":0,"minutes":77,"done":false,"id":"v3kwtyie"},{"date":"2026-06-26","subjectCode":"07","type":"トレ問","lap":3,"problems":62,"wrong":43,"minutes":151,"done":true,"id":"2g3yp313","correct":70},{"date":"2026-06-27","subjectCode":"07","type":"秒トレ","lap":4,"problems":59,"wrong":0,"minutes":36,"done":false,"id":"r3nqp2hf"},{"date":"2026-06-27","subjectCode":"07","type":"秒トレ","lap":4,"problems":70,"wrong":20,"minutes":49,"done":true,"id":"5oit97m2","correct":109},{"date":"2026-06-28","subjectCode":"06","type":"テキスト","lap":2,"problems":0,"wrong":0,"minutes":380,"done":true,"id":"lmg8ok1h"},{"date":"2026-06-28","subjectCode":"06","type":"秒トレ","lap":2,"problems":89,"wrong":47,"minutes":56,"done":true,"id":"xwsok98v","correct":42},{"date":"2026-06-29","subjectCode":"06","type":"秒トレ","lap":4,"problems":141,"wrong":0,"minutes":80,"done":true,"id":"bpl93t72"},{"date":"2026-06-29","subjectCode":"06","type":"秒トレ","lap":4,"problems":102,"wrong":98,"minutes":61,"done":true,"id":"tn0xrffd","correct":145},{"date":"2026-06-30","subjectCode":"10","type":"秒トレ","lap":1,"problems":90,"wrong":0,"minutes":68,"done":false,"id":"82i23nwn"},{"date":"2026-06-30","subjectCode":"10","type":"秒トレ","lap":1,"problems":53,"wrong":58,"minutes":49,"done":true,"id":"o6m551jg","correct":85},{"date":"2026-07-01","subjectCode":"06","type":"秒トレ","lap":5,"problems":121,"wrong":37,"minutes":76,"done":true,"id":"qm5fn49k","correct":84},{"date":"2026-07-01","subjectCode":"06","type":"秒トレ","lap":6,"problems":47,"wrong":16,"minutes":22,"done":true,"id":"vto4axki","correct":31},{"date":"2026-07-02","subjectCode":"06","type":"秒トレ","lap":7,"problems":62,"wrong":14,"minutes":56,"done":true,"id":"q5e356md","correct":48},{"date":"2026-07-02","subjectCode":"06","type":"秒トレ","lap":8,"problems":30,"wrong":0,"minutes":31,"done":false,"id":"23j7c6k1"},{"date":"2026-07-02","subjectCode":"06","type":"秒トレ","lap":8,"problems":29,"wrong":29,"minutes":50,"done":true,"id":"1k89p78i","correct":30},{"date":"2026-07-03","subjectCode":"10","type":"秒トレ","lap":2,"problems":107,"wrong":36,"minutes":92,"done":true,"id":"dmhhj53w","correct":71}],"results":[{"exam":"R7年度本試験","date":"2025-08-24","mode":"選択","scores":{"労基・安衛":1,"労災":2,"雇用":1,"労一":0,"健保":2,"厚年":3,"国年":3,"社一":2},"id":"5ih542rb"},{"exam":"R7年度本試験","date":"2025-08-24","mode":"択一","scores":{"労基・安全":6,"労災・徴収":3,"雇用・徴収":1,"一般常識":3,"健保":2,"厚年":0,"国年":4},"id":"hnwzduz1"},{"exam":"202606全日模試","date":"2026-06-21","mode":"択一","scores":{"労基・安全":4,"労災・徴収":3,"雇用・徴収":2,"一般常識":2,"健保":0,"厚年":5,"国年":5},"id":"m2ioxe4e"},{"exam":"202606全日模試","date":"2026-06-21","mode":"選択","scores":{"労基・安衛":3,"労災":2,"雇用":3,"労一":3,"健保":4,"厚年":3,"国年":3,"社一":0},"id":"pfhewhbd"}],"dayTemplates":{"weekday":[],"holiday":[]}};
+var KEY = "ssm-v5-state";
+
+/* ---------- utils ---------- */
+var uid=function(){return Math.random().toString(36).slice(2,10)};
+var pad=function(n){return String(n).padStart(2,"0")};
+var todayISO=function(){var d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+var days=function(a,b){return Math.round((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/864e5)};
+var addD=function(iso,n){var d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+var dow=function(iso){return new Date(iso+"T00:00:00").getDay()};      /* 0=日 */
+var WD=["日","月","火","水","木","金","土"];
+var md=function(iso){return iso?(+iso.slice(5,7))+"/"+(+iso.slice(8,10)):"—"};
+var fmtHM=function(m){m=Math.round(m||0);var h=Math.floor(m/60),x=m%60;
+  return h&&x?h+"時間"+x+"分":h?h+"時間":x+"分"};
+var fmtHMs=function(m){m=Math.round(m||0);return Math.floor(m/60)+":"+pad(m%60)};
+var parseHHMM=function(s){if(!s)return 0;var p=String(s).replace(/[^0-9]/g,"").padStart(4,"0");
+  return (+p.slice(0,-2)||0)*60+(+p.slice(-2)||0)};
+var esc=function(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
+
+/* ---------- state ---------- */
+var S=null;
+function defaults(){
+  return {config:{startDate:todayISO(),examDate:"2027-08-22",spareDays:7,targetHours:1000},
+    subjects:[],materials:[],milestones:[],records:[],results:[],
+    types:[],dayTemplates:{work:[],off:[]},weekPlan:{},week:{start:"",current:"",next:"",memo:""}};
+}
+function load(){
+  var raw=null;try{raw=localStorage.getItem(KEY)}catch(e){}
+  if(raw){try{S=JSON.parse(raw)}catch(e){S=null}}
+  if(!S) S=migrate(SEED?JSON.parse(JSON.stringify(SEED)):defaults());
+  fill();
+}
+function migrate(o){
+  var d=defaults();
+  d.config=Object.assign(d.config,o.config||{});
+  d.subjects=o.subjects||[]; d.materials=o.materials||[]; d.records=o.records||[];
+  d.results=o.results||[];
+  d.milestones=(o.milestones||[]).map(function(m){
+    return {id:m.id||uid(),name:m.name,date:m.date,plan:m.plan||"",review:m.review||"",nextFocus:m.nextFocus||""}});
+  var dt=o.dayTemplates||{};
+  d.dayTemplates={work:dt.work||dt.weekday||[],off:dt.off||dt.holiday||[]};
+  return d;
+}
+function fill(){
+  var c=S.config;
+  if(c.spareDays==null)c.spareDays=7;
+  if(c.targetHours==null)c.targetHours=1000;
+  /* 教材種別マスタ：既存データから起こす */
+  if(!S.types||!S.types.length){
+    var names=[],seen={};
+    S.materials.forEach(function(m){if(!seen[m.type]){seen[m.type]=1;names.push(m.type)}});
+    ["秒トレ","トレ問","テキスト"].forEach(function(n){if(!seen[n]){seen[n]=1;names.push(n)}});
+    var pal={"秒トレ":"#3B6FE0","トレ問":"#2E9E6B","テキスト":"#C98A00"};
+    S.types=names.map(function(n,i){
+      return {name:n,color:pal[n]||["#8B5CF6","#E0663B","#0E9AA7","#B0466F"][i%4],
+              quota:n!=="テキスト"}});
+  }
+  if(!S.weekPlan||!Object.keys(S.weekPlan).length){
+    /* 火〜金＝択一(トレ問)、土日＝選択(秒トレ)、月＝テキスト */
+    S.weekPlan={2:"トレ問",3:"トレ問",4:"トレ問",5:"トレ問",6:"秒トレ",0:"秒トレ",1:"テキスト"};
+  }
+  if(!S.week)S.week={start:"",current:"",next:"",memo:""};
+  if(!S.dayTemplates)S.dayTemplates={work:[],off:[]};
+  syncWeek();
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+/* 火曜始まりの週頭 */
+function weekStart(iso){var d=dow(iso);var back=(d-2+7)%7;return addD(iso,-back)}
+function syncWeek(){
+  var ws=weekStart(todayISO());
+  if(S.week.start!==ws){
+    /* 週が変わった：来週候補を今週へ繰り上げ */
+    S.week={start:ws,current:S.week.next||"",next:"",memo:""};
+  }
+}
+
+/* ---------- domain ---------- */
+var sName=function(code){var s=S.subjects.filter(function(x){return x.code===code})[0];return s?s.name:code};
+var tColor=function(t){var x=S.types.filter(function(y){return y.name===t})[0];return x?x.color:"#8A8A8E"};
+var quotaTypes=function(){return S.types.filter(function(t){return t.quota}).map(function(t){return t.name})};
+/* ノルマ対象は教材ごと。未設定なら種別の既定に従う */
+var isQuota=function(m){
+  if(m.quota===true||m.quota===false)return m.quota;
+  var t=S.types.filter(function(x){return x.name===m.type})[0];
+  return t?!!t.quota:false;
+};
+var spare=function(){return Math.max(0,+S.config.spareDays||0)};
+var effDL=function(iso){return addD(iso,-spare())};
+
+/* 周の区間＝完了フラグで区切る（v4.03と同じ思想） */
+function lapSegments(recs,code,type){
+  var rows=recs.filter(function(r){return r.subjectCode===code&&r.type===type})
+    .slice().sort(function(a,b){return a.date===b.date?((a.done?1:0)-(b.done?1:0)):(a.date<b.date?-1:1)});
+  var segs=[],cur=null;
+  rows.forEach(function(r){
+    if(!cur)cur={problems:0,minutes:0,done:false,first:null,last:null,ids:[]};
+    cur.problems+=r.problems||0; cur.minutes+=r.minutes||0; cur.ids.push(r.id);
+    if(cur.first==null)cur.first=r.date; cur.last=r.date;
+    if(r.done){cur.done=true;if(r.lapTotal!=null&&+r.lapTotal>0)cur.problems=+r.lapTotal;segs.push(cur);cur=null}
+  });
+  if(cur)segs.push(cur);
+  segs.forEach(function(s,i){s.lap=i+1});
+  return segs;
+}
+function openSeg(code,type){var s=lapSegments(S.records,code,type);var l=s[s.length-1];return l&&!l.done?l:null}
+function lastDone(code,type){
+  var s=lapSegments(S.records,code,type).filter(function(x){return x.done});
+  return s.length?s[s.length-1].last:null;
+}
+function progress(mat,recs){
+  var segs=lapSegments(recs,mat.subjectCode,mat.type);
+  var doneSegs=segs.filter(function(s){return s.done});
+  var maxC=doneSegs.length;
+  var cur=maxC+1, target=mat.targetLaps||0;
+  var lap1=(mat.lap1Problems===""||mat.lap1Problems==null)?null:+mat.lap1Problems;
+  var predicted=doneSegs.length?doneSegs[doneSegs.length-1].problems:lap1;
+  if(!predicted&&lap1)predicted=lap1;
+  var ready=!!(predicted&&predicted>0);
+  var remaining=0;
+  if(ready&&target>maxC){
+    var inProg=segs.length>maxC?segs[segs.length-1].problems:0;
+    if(segs.length&&segs[segs.length-1].done)inProg=0;
+    remaining+=Math.max(0,predicted-inProg);
+    var future=target-cur; if(future>0)remaining+=predicted*future;
+  }
+  return {remaining:remaining,current:cur,maxCompleted:maxC,predicted:predicted,ready:ready,target:target};
+}
+function nextMS(){
+  var t=todayISO();
+  return S.milestones.slice().filter(function(m){return m.date>=t})
+    .sort(function(a,b){return a.date<b.date?-1:1})[0]||null;
+}
+function totalRemaining(){
+  var st=S.config.startDate, recs=st?S.records.filter(function(r){return r.date>=st}):S.records;
+  var sum=0;
+  S.materials.forEach(function(m){
+    if(!isQuota(m))return;
+    var p=progress(m,recs); if(p.ready)sum+=p.remaining;
+  });
+  return sum;
+}
+function dailyQuota(){
+  var nm=nextMS(); if(!nm)return null;
+  var d=Math.max(1,days(todayISO(),effDL(nm.date)));
+  return Math.ceil(totalRemaining()/d);
+}
+/* 優先度＝最終周回日の古い順（ノルマ対象の教材のみ） */
+function priority(){
+  var out=[];
+  S.materials.forEach(function(m){
+    if(!isQuota(m))return;
+    var ld=lastDone(m.subjectCode,m.type);
+    out.push({code:m.subjectCode,name:sName(m.subjectCode),type:m.type,
+      last:ld,ago:ld?days(ld,todayISO()):null});
+  });
+  out.sort(function(a,b){
+    var i=S.subjects.map(function(s){return s.code}).indexOf(a.code);
+    var j=S.subjects.map(function(s){return s.code}).indexOf(b.code);
+    return i-j;});
+  out.sort(function(a,b){
+    if(a.last==null&&b.last==null)return 0;
+    if(a.last==null)return -1; if(b.last==null)return 1;
+    return a.last<b.last?-1:1;
+  });
+  return out;
+}
+/* 科目単位（教材をまたいだ最古） */
+var ROTATE_NG=function(code){var n=sName(code);return code==="99"||n==="その他"};
+function prioritySubjects(){
+  var by={};
+  priority().forEach(function(r){
+    if(ROTATE_NG(r.code))return;
+    if(!by[r.code])by[r.code]={code:r.code,name:r.name,last:r.last,ago:r.ago};
+    else{
+      var c=by[r.code];
+      if(r.last==null||(c.last!=null&&r.last<c.last)){c.last=r.last;c.ago=r.ago}
+    }
+  });
+  var arr=Object.keys(by).map(function(k){return by[k]});
+  arr.sort(function(a,b){
+    if(a.last==null&&b.last==null)return 0;
+    if(a.last==null)return -1; if(b.last==null)return 1;
+    return a.last<b.last?-1:1;});
+  return arr;
+}
+function minutesOn(iso){var s=0;S.records.forEach(function(r){if(r.date===iso)s+=r.minutes||0});return s}
+function problemsOn(iso){var s=0;S.records.forEach(function(r){if(r.date===iso)s+=r.problems||0});return s}
+function streak(){
+  var n=0,d=todayISO();
+  if(minutesOn(d)===0&&problemsOn(d)===0)d=addD(d,-1);
+  while(minutesOn(d)>0||problemsOn(d)>0){n++;d=addD(d,-1);if(n>2000)break}
+  return n;
+}
+function totalMinutes(){var s=0,st=S.config.startDate;
+  S.records.forEach(function(r){if(!st||r.date>=st)s+=r.minutes||0});return s}
+/* 4期構成：起算日〜実効締切を4分割（MSがあればMSの実効締切を境界に使う） */
+function phases(){
+  var st=S.config.startDate,en=effDL(S.config.examDate);
+  var ms=S.milestones.map(function(m){return effDL(m.date)}).sort();
+  var cuts;
+  if(ms.length>=3){
+    var pick=[ms[Math.floor(ms.length*1/4)],ms[Math.floor(ms.length*2/4)],ms[Math.floor(ms.length*3/4)]];
+    cuts=pick;
+  }else{
+    var tot=days(st,en);
+    cuts=[addD(st,Math.round(tot*.35)),addD(st,Math.round(tot*.62)),addD(st,Math.round(tot*.85))];
+  }
+  var bounds=[st].concat(cuts,[en]);
+  var names=["第1期 土台","第2期 加速","第3期 圧縮","第4期 総復習"];
+  var cyc=[70,50,30,10];
+  var out=[];
+  for(var i=0;i<4;i++)out.push({name:names[i],from:bounds[i],to:bounds[i+1],cycle:cyc[i]});
+  return out;
+}
+function currentPhase(){
+  var t=todayISO(),ps=phases();
+  for(var i=0;i<ps.length;i++) if(t<=ps[i].to) return ps[i];
+  return ps[ps.length-1];
+}
+
+/* ---------- app shell ---------- */
+var TABS=[
+  ["today","今日",'<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>'],
+  ["plan","計画",'<rect x="4" y="4" width="16" height="17" rx="2.5"/><path d="M8 3v3M16 3v3M4 10h16M8.5 14h3M8.5 17.5h6"/>'],
+  ["rec","記録",'<path d="M4 20.5 4.9 17 16.6 5.3a1.8 1.8 0 0 1 2.5 0l0 0a1.8 1.8 0 0 1 0 2.5L7.5 19.6z"/><path d="M14.5 7.4 16.9 9.8"/>'],
+  ["stat","統計",'<path d="M5 20V11M12 20V4M19 20v-6"/>'],
+  ["set","設定",'<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/>']
+];
+var tab=(function(){try{return localStorage.getItem("ssm-v5-tab")||"today"}catch(e){return "today"}})();
+function go(t){tab=t;try{localStorage.setItem("ssm-v5-tab",t)}catch(e){}
+  try{window.scrollTo(0,0)}catch(e){}render()}
+
+function render(){
+  syncWeek();
+  var h={today:vToday,plan:vPlan,rec:vRec,stat:vStat,set:vSet}[tab];
+  document.getElementById("app").innerHTML='<div class="wrap">'+h()+'</div>';
+  document.getElementById("tabbar").innerHTML=TABS.map(function(t){
+    return '<button data-go="'+t[0]+'" class="'+(tab===t[0]?"on":"")+'">'+
+      '<svg viewBox="0 0 24 24">'+t[2]+'</svg>'+t[1]+'</button>'}).join("");
+}
+
+/* ---------- 今日 ---------- */
+function vToday(){
+  var t=todayISO(), c=S.config;
+  var toExam=Math.max(0,days(t,c.examDate));
+  var dq=dailyQuota(), pt=problemsOn(t), mt=minutesOn(t);
+  var pct=dq?Math.min(100,Math.round(pt/dq*100)):0;
+  var todayType=S.weekPlan[dow(t)]||"";
+  var cur=S.week.current;
+  var ph=currentPhase();
+  var pri=prioritySubjects();
+  var late=pri.filter(function(x){return x.last==null||x.ago>=ph.cycle}).length;
+
+  var R=34,C=2*Math.PI*R;
+  var html='<div class="head"><div>'+
+    '<div class="eyebrow">'+ (+t.slice(5,7)) +'月'+(+t.slice(8,10))+'日('+WD[dow(t)]+')・あと'+toExam+'日</div>'+
+    '<h1>今日</h1></div>'+
+    '<div class="chip">🔥 '+streak()+'日</div></div>';
+
+  /* ノルマ */
+  html+='<div class="card"><div class="ring">'+
+    '<svg width="82" height="82" viewBox="0 0 82 82">'+
+      '<circle cx="41" cy="41" r="'+R+'" fill="none" stroke="#EDEBE6" stroke-width="8"/>'+
+      '<circle cx="41" cy="41" r="'+R+'" fill="none" stroke="'+(pct>=100?"#2E9E6B":"#16181C")+'" stroke-width="8"'+
+      ' stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-pct/100))+'"'+
+      ' transform="rotate(-90 41 41)"/>'+
+      '<text x="41" y="45" text-anchor="middle" font-size="17" font-weight="800" fill="#14161A" class="num">'+pct+'</text>'+
+      '<text x="41" y="45" text-anchor="middle" font-size="17" fill="transparent">.</text>'+
+    '</svg><div><div class="t1">今日のノルマ</div>'+
+    '<div class="t2 num">'+pt+' / '+(dq==null?"—":dq)+' 問　・　'+fmtHM(mt)+'</div></div></div></div>';
+
+  /* 黒カード：次の一手 */
+  html+='<div class="dark">';
+  if(cur){
+    html+='<div class="lab">今週やること</div><div class="big">'+esc(sName(cur))+
+      (todayType?'　'+esc(todayType):'')+'</div>'+
+      '<div class="meta">'+WD[dow(t)]+'曜は「'+esc(todayType||"—")+'」の日・'+esc(ph.name)+'（周期'+ph.cycle+'日）</div>';
+  }else{
+    html+='<div class="lab">まだ今週の科目が決まっていません</div>'+
+      '<div class="big">今週の科目を<br>選びましょう</div>'+
+      '<div class="meta">最終周回日が古い科目から候補を出します</div>';
+  }
+  html+='<button class="btn" data-sheet="'+(cur?"rec":"pick")+'">'+(cur?"記録する":"科目を選ぶ")+'</button></div>';
+
+  /* タイル */
+  html+='<div class="tiles">'+
+    tile(pri[0]?pri[0].name:"—","","最優先の科目")+
+    tile(late,"科目","周期を超過")+
+    tile(Math.round(totalMinutes()/60),"h","累計学習")+
+  '</div>';
+
+  /* 優先度 上位5 */
+  html+='<div class="card"><h2>最終周回日が古い順</h2>';
+  html+=pri.slice(0,5).map(function(r){
+    var over=r.last==null||r.ago>=ph.cycle;
+    return '<div class="row"><span class="nm">'+esc(r.name)+'</span>'+
+      '<span class="sm num" style="color:'+(over?"var(--bad)":"var(--faint)")+
+      ';font-weight:'+(over?700:400)+'">'+(r.last==null?"未着手":r.ago+"日前")+'</span></div>'}).join("");
+  html+='<div class="hint">周期'+ph.cycle+'日を超えた科目を赤で出しています。'+
+    (cur?'<br>今週は「'+esc(sName(cur))+'」。来週の候補は計画タブで選べます。':'')+'</div></div>';
+  return html;
+}
+function tile(v,u,k){return '<div class="tile"><div class="v num">'+esc(v)+
+  (u?'<span class="u">'+esc(u)+'</span>':'')+'</div><div class="k">'+esc(k)+'</div></div>'}
+
+/* ---------- 計画 ---------- */
+var planKind="work";
+function vPlan(){
+  var ps=phases(),cp=currentPhase(),t=todayISO();
+  var html='<div class="head"><div><div class="eyebrow">火曜はじまり・'+esc(cp.name)+'</div><h1>計画</h1></div></div>';
+
+  /* 前期からの意識事項 */
+  var passed=S.milestones.slice().map(function(m){return {m:m,eff:effDL(m.date)}})
+    .filter(function(x){return x.eff<t}).sort(function(a,b){return a.eff<b.eff?-1:1});
+  var prev=passed.length?passed[passed.length-1]:null;
+  var curMS=S.milestones.slice().map(function(m){return {m:m,eff:effDL(m.date)}})
+    .filter(function(x){return x.eff>=t}).sort(function(a,b){return a.eff<b.eff?-1:1})[0];
+  if(curMS&&(curMS.m.plan||"").trim())
+    html+='<div class="okbox"><b>今期の計画（'+esc(curMS.m.name)+'）</b><br>'+esc(curMS.m.plan)+'</div>';
+  if(prev&&!(prev.m.review||"").trim())
+    html+='<div class="warnbox"><b>「'+esc(prev.m.name)+'」の総括が空欄です。</b><br>下のマイルストーンで振り返りを書いてください。</div>';
+  if(prev&&(prev.m.nextFocus||"").trim())
+    html+='<div class="okbox"><b>今期の意識事項</b><br>'+esc(prev.m.nextFocus)+'</div>';
+
+  /* 今週 */
+  var ws=S.week.start,we=addD(ws,6);
+  var pri=prioritySubjects().slice(0,3);
+  html+='<div class="card"><h2>今週（'+md(ws)+' – '+md(we)+'）</h2>';
+  html+='<div class="row"><span class="nm">今週の科目</span>'+
+    '<button class="pill b" data-sheet="pickcur">'+(S.week.current?esc(sName(S.week.current)):"選ぶ")+'</button></div>';
+  html+='<div class="row"><span class="nm">来週の候補</span>'+
+    '<button class="pill b" data-sheet="pick">'+(S.week.next?esc(sName(S.week.next)):"選ぶ")+'</button></div>';
+  html+='<label class="f" style="margin-top:12px"><span>メモ（週が変わると消えます）</span>'+
+    '<textarea class="inp" rows="3" data-week="memo" placeholder="例：健保は保険給付から。徴収は労一の合間に。">'+esc(S.week.memo)+'</textarea></label>';
+  html+='<div class="hint">最終周回日が古い順の候補：'+pri.map(function(p){
+    return esc(p.name)+"("+(p.last==null?"未":p.ago+"日")+")"}).join("・")+'</div></div>';
+
+  /* 週テンプレ */
+  html+='<div class="card"><h2>曜日ごとの教材</h2>';
+  [2,3,4,5,6,0,1].forEach(function(d){
+    html+='<div class="row"><span class="dot" style="background:'+tColor(S.weekPlan[d])+'"></span>'+
+      '<span class="nm">'+WD[d]+'曜</span>'+
+      '<select class="inp" style="width:auto;padding:7px 30px 7px 11px;font-size:13px" data-wp="'+d+'">'+
+      '<option value="">—</option>'+S.types.map(function(ty){
+        return '<option value="'+esc(ty.name)+'"'+(S.weekPlan[d]===ty.name?" selected":"")+'>'+esc(ty.name)+'</option>'
+      }).join("")+'</select></div>';
+  });
+  html+='<div class="hint">火曜はじまり。月曜は定休なので、解いて詰まった所を読む日に置いています。</div></div>';
+
+  /* デイリーテンプレ */
+  var blocks=S.dayTemplates[planKind]||[];
+  var tot=blocks.reduce(function(a,b){var s=parseHHMM(b.start),e=parseHHMM(b.end);return a+(e>s?e-s:0)},0);
+  var dq=dailyQuota();
+  html+='<div class="card"><h2>1日の時間の器</h2>'+
+    '<div class="seg" style="margin-bottom:14px">'+
+    '<button data-kind="work" class="'+(planKind==="work"?"on":"")+'">仕事の日</button>'+
+    '<button data-kind="off" class="'+(planKind==="off"?"on":"")+'">月曜（定休）</button></div>';
+  html+='<div style="position:relative;height:40px;background:#F3F1EC;border-radius:10px;overflow:hidden;margin-bottom:4px">';
+  [0,6,12,18,24].forEach(function(h){html+='<i style="position:absolute;top:0;bottom:0;width:1px;background:#E4E1DA;left:'+(h/24*100)+'%"></i>'});
+  blocks.forEach(function(b){var s=parseHHMM(b.start),e=parseHHMM(b.end);if(e<=s)return;
+    html+='<i style="position:absolute;top:7px;bottom:7px;background:#16181C;border-radius:3px;left:'+(s/1440*100)+'%;width:'+((e-s)/1440*100)+'%"></i>'});
+  html+='</div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-bottom:12px" class="num"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>';
+  blocks.forEach(function(b,i){
+    var s=parseHHMM(b.start),e=parseHHMM(b.end),len=e>s?e-s:0;
+    html+='<div class="row"><input class="inp num" style="width:76px;padding:8px 10px" inputmode="numeric" maxlength="4" placeholder="0600" value="'+esc(b.start)+'" data-blk="'+i+'" data-f="start">'+
+      '<span style="color:var(--faint)">→</span>'+
+      '<input class="inp num" style="width:76px;padding:8px 10px" inputmode="numeric" maxlength="4" placeholder="0730" value="'+esc(b.end)+'" data-blk="'+i+'" data-f="end">'+
+      '<span class="pill'+(len?"":" ")+'" style="'+(len?"":"color:var(--bad);border-color:var(--bad)")+'">'+(len?fmtHM(len):"要修正")+'</span>'+
+      '<button class="x" data-delblk="'+i+'">×</button></div>';
+  });
+  html+='<button class="add" data-addblk="1" style="margin-top:8px">＋ 枠を追加</button>';
+  html+='<div class="tiles" style="margin-top:14px">'+
+    tile(tot?fmtHM(tot):"—","","確保した時間")+
+    tile(dq==null?"—":dq,"問","総ノルマ/日")+
+    tile(dq&&tot?Math.round(tot*60/dq):"—","秒","1問の持ち時間")+'</div>';
+  html+='<div class="hint">HHMM で入力（0600 → 6:00）。1問30秒を切ると枠が足りていない目安です。</div></div>';
+
+  /* 期 */
+  html+='<div class="card"><h2>4期構成</h2>';
+  ps.forEach(function(p){
+    var on=p===cp, tot2=Math.max(1,days(p.from,p.to));
+    var done=Math.max(0,Math.min(tot2,days(p.from,t)));
+    html+='<div style="margin-bottom:13px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">'+
+      '<span style="font-weight:'+(on?700:400)+'">'+esc(p.name)+'<span class="sm num" style="margin-left:6px">'+md(p.from)+'–'+md(p.to)+'</span></span>'+
+      '<span class="sm num">全科目'+p.cycle+'日で1周</span></div>'+
+      '<div class="bar"><i style="width:'+(done/tot2*100)+'%;background:'+(on?"#16181C":"#C9C6C0")+'"></i></div></div>';
+  });
+  html+='<div class="hint">1科目1週間（選択1日＋択一4日＋テキスト1〜2日）で10科目＝約70日。期が進むほど厳選周になって縮みます。</div></div>';
+
+  /* MS */
+  html+='<div class="card"><h2>マイルストーン</h2>';
+  S.milestones.slice().sort(function(a,b){return a.date<b.date?-1:1}).forEach(function(m){
+    var done=effDL(m.date)<t, empty=done&&!(m.review||"").trim();
+    html+='<div style="border:1px solid '+(empty?"var(--bad)":"var(--line)")+';border-radius:13px;padding:12px 13px;margin-bottom:9px">'+
+      '<div style="display:flex;align-items:baseline;gap:7px;margin-bottom:9px">'+
+      '<b style="font-size:14.5px">'+esc(m.name)+'</b><span class="sm num">'+md(effDL(m.date))+'</span>'+
+      '<span class="pill" style="margin-left:auto;'+(empty?"color:var(--bad);border-color:var(--bad)":"")+'">'+
+      (done?(empty?"総括が空欄":"総括あり"):"これから")+'</span></div>'+
+      '<label class="f"><span>この期間の計画</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="plan">'+esc(m.plan)+'</textarea></label>'+
+      (done?'<label class="f"><span>振り返り</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="review">'+esc(m.review)+'</textarea></label>'+
+      '<label class="f" style="margin-bottom:0"><span>次で気を付ける事</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="nextFocus">'+esc(m.nextFocus)+'</textarea></label>':'')+
+      '</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+/* ---------- 記録 ---------- */
+var F={date:"",subjectCode:"",type:"",problems:"",hhmm:"",done:false,memo:""};
+var recOpen=null;
+function vRec(){
+  if(!F.date)F.date=todayISO();
+  if(!F.subjectCode)F.subjectCode=(S.subjects[0]||{}).code||"";
+  if(!F.type)F.type=(S.types[0]||{}).name||"";
+  var op=openSeg(F.subjectCode,F.type);
+  var lapNo=lapSegments(S.records,F.subjectCode,F.type).length+(op?0:1);
+
+  var html='<div class="head"><div><div class="eyebrow">数字ふたつと、チェックひとつ</div><h1>記録</h1></div></div>';
+  html+='<div class="card">'+
+    '<label class="f"><span>日付</span><input type="date" class="inp" data-f="date" value="'+esc(F.date)+'"></label>'+
+    '<div class="g2">'+
+      '<label class="f"><span>科目</span><select class="inp" data-f="subjectCode">'+
+        S.subjects.map(function(s){return '<option value="'+s.code+'"'+(F.subjectCode===s.code?" selected":"")+'>'+esc(s.name)+'</option>'}).join("")+
+      '</select></label>'+
+      '<label class="f"><span>教材</span><select class="inp" data-f="type">'+
+        S.types.map(function(ty){return '<option value="'+esc(ty.name)+'"'+(F.type===ty.name?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
+      '</select></label>'+
+    '</div>'+
+    '<div class="g2">'+
+      '<label class="f"><span>解いた問題数</span><input class="inp num" inputmode="numeric" data-f="problems" value="'+esc(F.problems)+'" placeholder="アプリの累計"></label>'+
+      '<label class="f"><span>学習時間 HHMM</span><input class="inp num" inputmode="numeric" maxlength="4" data-f="hhmm" value="'+esc(F.hhmm)+'" placeholder="0130"></label>'+
+    '</div>'+
+    '<label class="f"><span>メモ（次回の引き継ぎ）</span><input class="inp" data-f="memo" value="'+esc(F.memo)+'" placeholder="例：次は312番から"></label>'+
+    '<button class="toggle'+(F.done?" on":"")+'" data-toggledone="1">'+(F.done?"✓ この周を完了にする":"この周は継続中")+'</button>'+
+    '<div class="hint">いま '+esc(sName(F.subjectCode))+'・'+esc(F.type)+' は '+lapNo+'周目'+
+      (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。</div>'+
+    '<div style="margin-top:14px"><button class="primary" data-submit="1">記録する</button></div>'+
+  '</div>';
+
+  /* 履歴 */
+  var byDate={};
+  S.records.forEach(function(r){(byDate[r.date]=byDate[r.date]||[]).push(r)});
+  var dates=Object.keys(byDate).sort().reverse().slice(0,40);
+  html+='<div class="card"><h2>これまでの記録</h2>';
+  if(!dates.length)html+='<div class="empty">まだ記録がありません。</div>';
+  dates.forEach(function(d){
+    var rs=byDate[d],p=0,m=0;
+    rs.forEach(function(r){p+=r.problems||0;m+=r.minutes||0});
+    var open=recOpen===d;
+    html+='<div class="row" data-openday="'+d+'"><span class="sm" style="width:11px">'+(open?"▾":"▸")+'</span>'+
+      '<span class="nm num">'+d.slice(5).replace("-","/")+'<span class="sm" style="margin-left:7px">'+WD[dow(d)]+'</span></span>'+
+      (p?'<span class="pill num">'+p+'問</span>':'')+
+      (m?'<span class="pill num">'+fmtHMs(m)+'</span>':'')+'</div>';
+    if(open){
+      rs.forEach(function(r){
+        html+='<div class="row" style="padding-left:20px">'+
+          '<span class="dot" style="background:'+tColor(r.type)+'"></span>'+
+          '<span class="nm">'+esc(sName(r.subjectCode))+' <span class="sm">'+esc(r.type)+'</span></span>'+
+          (r.problems?'<span class="pill num">'+r.problems+'問</span>':'')+
+          (r.minutes?'<span class="pill num">'+fmtHMs(r.minutes)+'</span>':'')+
+          (r.done?'<span class="pill" style="color:var(--good);border-color:var(--good)">完了</span>':'')+
+          '<button class="x" data-del="'+r.id+'">×</button></div>';
+        if(r.memo)html+='<div class="sm" style="padding:0 0 9px 40px">'+esc(r.memo)+'</div>';
+      });
+    }
+  });
+  html+='</div>';
+  return html;
+}
+
+/* ---------- 統計 ---------- */
+function vStat(){
+  var t=todayISO(),cp=currentPhase();
+  var html='<div class="head"><div><div class="eyebrow">教材をまたいだ横断ビュー</div><h1>統計</h1></div></div>';
+
+  /* 1000時間 */
+  var tm=totalMinutes(),goal=(+S.config.targetHours||1000)*60;
+  var sc=Math.max(goal,tm);
+  html+='<div class="card"><h2>学習時間</h2>'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">'+
+    '<span class="num" style="font-size:26px;font-weight:800">'+fmtHM(tm)+'</span>'+
+    '<span class="sm num">目安 '+(+S.config.targetHours||1000)+'時間</span></div>'+
+    '<div class="gauge"><i style="width:'+(tm/sc*100)+'%;background:#16181C"></i>'+
+    '<b style="left:'+(goal/sc*100)+'%"></b></div></div>';
+
+  /* 優先度 */
+  html+='<div class="card"><h2>優先度（最終周回日）</h2>';
+  var pr=priority();
+  if(!pr.length)html+='<div class="empty">ノルマ対象の教材がありません。</div>';
+  pr.forEach(function(r,i){
+    var over=r.last==null||r.ago>=cp.cycle;
+    html+='<div class="row"'+(i<3?' style="background:#FBFAF8;border-radius:9px;padding-left:8px;padding-right:8px"':'')+'>'+
+      '<span class="dot" style="background:'+tColor(r.type)+'"></span>'+
+      '<span class="nm">'+esc(r.name)+' <span class="sm">'+esc(r.type)+'</span></span>'+
+      '<span class="sm num">'+(r.last?md(r.last):"")+'</span>'+
+      '<span class="num" style="font-size:13px;min-width:52px;text-align:right;color:'+
+        (over?"var(--bad)":"var(--faint)")+';font-weight:'+(over?700:400)+'">'+
+        (r.last==null?"未着手":r.ago+"日前")+'</span></div>';
+  });
+  html+='<div class="hint">上位3件が来週の候補。'+esc(cp.name)+'の周期は'+cp.cycle+'日なので、それを超えたら赤で出ます。</div></div>';
+
+  /* ノルマ表 */
+  var st=S.config.startDate,recs=st?S.records.filter(function(r){return r.date>=st}):S.records;
+  var nm=nextMS(),dl=nm?effDL(nm.date):null,dd=dl?Math.max(1,days(t,dl)):null;
+  html+='<div class="card"><h2>残りと1日ノルマ'+(nm?'（'+esc(nm.name)+'まで'+dd+'日）':'')+'</h2>';
+  var any=false;
+  S.materials.forEach(function(m){
+    if(!isQuota(m))return;
+    var p=progress(m,recs); if(!p.ready)return; any=true;
+    var rate=p.target?Math.min(100,Math.round(p.maxCompleted/p.target*100)):0;
+    html+='<div class="row"><span class="dot" style="background:'+tColor(m.type)+'"></span>'+
+      '<span class="nm">'+esc(sName(m.subjectCode))+' <span class="sm">'+esc(m.type)+'</span></span>'+
+      '<span class="sm num">'+p.maxCompleted+'/'+p.target+'周</span>'+
+      '<span class="pill num">'+p.remaining+'問</span>'+
+      '<span class="num" style="font-size:13px;min-width:38px;text-align:right;font-weight:700">'+
+        (dd?Math.ceil(p.remaining/dd):"—")+'</span></div>';
+  });
+  if(!any)html+='<div class="empty">設定タブで教材の1周目問題数を入れるとノルマが出ます。</div>';
+  html+='<div class="row" style="border-top:1px solid var(--line);margin-top:6px"><span class="nm" style="color:var(--sub)">合計</span>'+
+    '<span class="pill num">'+totalRemaining()+'問</span>'+
+    '<span class="num" style="font-size:15px;font-weight:800;min-width:38px;text-align:right">'+(dailyQuota()==null?"—":dailyQuota())+'</span></div>';
+  html+='</div>';
+
+  /* ヒートマップ */
+  html+='<div class="card"><h2>学習ヒートマップ</h2>'+heatmap()+
+    '<div class="hint">1日の総学習時間で色分け。教材を問わない唯一の画面です。</div></div>';
+
+  /* 模試 */
+  if(S.results&&S.results.length){
+    html+='<div class="card"><h2>模試・本試験</h2>';
+    S.results.slice().sort(function(a,b){return a.date<b.date?1:-1}).forEach(function(r){
+      var ks=Object.keys(r.scores||{});
+      html+='<div style="padding:10px 0;border-bottom:1px solid var(--line2)">'+
+        '<div style="display:flex;gap:7px;align-items:baseline"><b style="font-size:14px">'+esc(r.exam)+'</b>'+
+        '<span class="pill">'+esc(r.mode)+'式</span><span class="sm num" style="margin-left:auto">'+esc(r.date)+'</span></div>'+
+        '<div class="sm num" style="margin-top:5px">'+ks.map(function(k){
+          var v=r.scores[k];
+          return esc(k)+' <b style="color:'+(v<=1?"var(--bad)":"var(--ink)")+'">'+v+'</b>'}).join("　")+'</div></div>';
+    });
+    html+='<div class="hint">科目別の弱点は、来週の科目を選ぶときの材料に。</div></div>';
+  }
+  return html;
+}
+function hmColor(m,future){
+  if(future)return "#E9E7E2";
+  if(!m)return "#F0EEE9";
+  if(m<90){var r=Math.min(1,m/90);
+    var mix=function(a,b){return Math.round(a+(b-a)*r)};
+    return "rgb("+mix(0xF6,0xE8)+","+mix(0xD9,0x6A)+","+mix(0xD5,0x5E)+")"}
+  if(m<180)return "#E8C15E";
+  return "#5CB98A";
+}
+function heatmap(){
+  var st=S.config.startDate,en=S.config.examDate,t=todayISO();
+  if(!st||!en||en<st)return '<div class="empty">起算日と受験日を設定してください。</div>';
+  var by={};S.records.forEach(function(r){by[r.date]=(by[r.date]||0)+(r.minutes||0)});
+  var months=[],ym=st.slice(0,7),endYM=en.slice(0,7);
+  while(ym<=endYM){months.push(ym);
+    var y=+ym.slice(0,4),m=+ym.slice(5,7);m++;if(m>12){m=1;y++}ym=y+"-"+pad(m)}
+  var h='<div class="hm">';
+  months.forEach(function(ym){
+    var y=+ym.slice(0,4),mo=+ym.slice(5,7);
+    var lead=(new Date(Date.UTC(y,mo-1,1)).getUTCDay()+6)%7;   /* 月曜始まり */
+    var nd=new Date(Date.UTC(y,mo,0)).getUTCDate();
+    h+='<div class="hmM"><div class="lb">'+(mo===1?y+"年1月":mo+"月")+'</div><div class="hmG">';
+    for(var i=0;i<42;i++){
+      var day=i-lead+1;
+      if(day<1||day>nd){h+='<i></i>';continue}
+      var iso=ym+"-"+pad(day);
+      if(iso<st||iso>en){h+='<i></i>';continue}
+      h+='<i title="'+iso+'" style="background:'+hmColor(by[iso]||0,iso>t)+
+        (iso===t?';box-shadow:0 0 0 1.5px #16181C':'')+'"></i>';
+    }
+    h+='</div></div>';
+  });
+  return h+'</div>';
+}
+
+/* ---------- 設定 ---------- */
+function vSet(){
+  var html='<div class="head"><div><div class="eyebrow">マスタとデータ</div><h1>設定</h1></div></div>';
+  html+='<div class="card"><h2>期日</h2>'+
+    '<div class="g2">'+
+    '<label class="f"><span>起算日</span><input type="date" class="inp" data-cfg="startDate" value="'+esc(S.config.startDate)+'"></label>'+
+    '<label class="f"><span>受験日</span><input type="date" class="inp" data-cfg="examDate" value="'+esc(S.config.examDate)+'"></label>'+
+    '<label class="f"><span>予備日</span><input class="inp num" inputmode="numeric" data-cfg="spareDays" value="'+esc(S.config.spareDays)+'"></label>'+
+    '<label class="f" style="margin-bottom:0"><span>目標時間</span><input class="inp num" inputmode="numeric" data-cfg="targetHours" value="'+esc(S.config.targetHours)+'"></label>'+
+    '</div><div class="hint">締切は「マイルストーン設定日 − 予備日」で計算します。</div></div>';
+
+  /* 教材種別 */
+  html+='<div class="card"><h2>教材種別</h2>';
+  S.types.forEach(function(ty,i){
+    html+='<div class="row"><span class="dot" style="background:'+ty.color+'"></span>'+
+      '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(ty.name)+'" data-ty="'+i+'" data-f="name">'+
+      '<button class="pill'+(ty.quota?" b":"")+'" data-tyq="'+i+'">'+(ty.quota?"ノルマ対象":"対象外")+'</button>'+
+      '<button class="x" data-delty="'+i+'">×</button></div>';
+  });
+  html+='<button class="add" data-addty="1" style="margin-top:8px">＋ 教材種別を追加</button>'+
+    '<div class="hint">「ノルマ対象」にした種別だけが残り問題数と優先度の計算に入ります。名前を変えると記録の表示名も変わります（記録側の値は書き換わりません）。</div></div>';
+
+  /* 科目 */
+  html+='<div class="card"><h2>科目</h2>';
+  S.subjects.forEach(function(s,i){
+    html+='<div class="row"><input class="inp num" style="width:56px;padding:8px 10px" value="'+esc(s.code)+'" data-sub="'+i+'" data-f="code">'+
+      '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(s.name)+'" data-sub="'+i+'" data-f="name">'+
+      '<button class="x" data-delsub="'+i+'">×</button></div>';
+  });
+  html+='<button class="add" data-addsub="1" style="margin-top:8px">＋ 科目を追加</button></div>';
+
+  /* 教材 */
+  html+='<div class="card"><h2>教材（'+S.materials.length+'件）</h2>';
+  S.materials.forEach(function(m,i){
+    var q=isQuota(m);
+    html+='<div style="border:1px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:9px;background:#FBFAF8">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'+
+        '<span class="dot" style="background:'+tColor(m.type)+'"></span>'+
+        '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="subjectCode">'+
+          S.subjects.map(function(s){return '<option value="'+esc(s.code)+'"'+(m.subjectCode===s.code?" selected":"")+'>'+esc(s.name)+'</option>'}).join("")+
+        '</select>'+
+        '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="type">'+
+          S.types.map(function(ty){return '<option value="'+esc(ty.name)+'"'+(m.type===ty.name?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
+        '</select>'+
+        '<button class="x" data-delmat="'+i+'">×</button>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<label style="flex:1"><span class="sm">目標周回</span>'+
+        '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.targetLaps)+'" data-mat="'+i+'" data-f="targetLaps"></label>'+
+        '<label style="flex:1"><span class="sm">1周目問題数</span>'+
+        '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.lap1Problems)+'" data-mat="'+i+'" data-f="lap1Problems" placeholder="—"></label>'+
+        '<button class="toggle'+(q?" on":"")+'" style="flex:1;padding:9px 6px;font-size:12px;margin-top:16px" data-matq="'+i+'">'+
+          (q?"ノルマ対象":"対象外")+'</button>'+
+      '</div></div>';
+  });
+  html+='<button class="add" data-addmat="1">＋ 教材を追加</button>'+
+    '<div class="hint">科目と種別はここで付け替えられます。1周目問題数を入れないとノルマは出ません。'+
+    'ノルマの可否は教材ごとに決められ、未設定の教材は種別の既定（'+
+    S.types.map(function(t){return esc(t.name)+(t.quota?"○":"×")}).join("・")+'）に従います。</div></div>';
+
+  /* MS */
+  html+='<div class="card"><h2>マイルストーン</h2>';
+  S.milestones.slice().sort(function(a,b){return a.date<b.date?-1:1}).forEach(function(m){
+    html+='<div class="row"><input class="inp" style="width:88px;padding:8px 10px" value="'+esc(m.name)+'" data-msx="'+m.id+'" data-f="name">'+
+      '<input type="date" class="inp" style="flex:1;padding:8px 10px" value="'+esc(m.date)+'" data-msx="'+m.id+'" data-f="date">'+
+      '<button class="x" data-delms="'+m.id+'">×</button></div>';
+  });
+  html+='<button class="add" data-addms="1" style="margin-top:8px">＋ マイルストーンを追加</button></div>';
+
+  html+='<div class="card"><h2>データ</h2>'+
+    '<button class="primary" data-export="1">バックアップを書き出す</button>'+
+    '<div style="height:9px"></div>'+
+    '<button class="ghost" style="width:100%" data-import="1">バックアップを読み込む</button>'+
+    '<input type="file" id="fileIn" accept=".json" style="display:none">'+
+    '<div class="hint">このブラウザに自動保存されます。書き出しは端末をまたぐときのバックアップ用です。</div></div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v5.00</div>';
+  return html;
+}
+
+/* ---------- sheets ---------- */
+var sheet=null;
+function showSheet(kind){
+  sheet=kind;
+  var h='';
+  if(kind==="pick"||kind==="pickcur"){
+    var isCur=kind==="pickcur";
+    var cand=prioritySubjects();
+    h='<h3>'+(isCur?"今週":"来週")+'の科目</h3>'+
+      '<div class="hint" style="margin:0 0 12px">最終周回日が古い順です。提案どおりでなくて構いません。</div>';
+    cand.forEach(function(c,i){
+      var sel=(isCur?S.week.current:S.week.next)===c.code;
+      h+='<button class="choice'+(sel?" on":"")+'" data-pick="'+c.code+'" data-cur="'+(isCur?1:0)+'">'+
+        '<span class="s">'+(c.last==null?"未着手":c.ago+"日前")+'</span>'+esc(c.name)+
+        (i<3?' <span class="pill b" style="margin-left:6px">候補</span>':'')+'</button>';
+    });
+    h+='<button class="ghost" style="width:100%;margin-top:10px" data-close="1">閉じる</button>';
+  }
+  if(kind==="rec"){ go("rec"); sheet=null; return; }
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="sheetbg" id="sheetbg"><div class="sheet">'+h+'</div></div>');
+}
+function closeSheet(){sheet=null;var e=document.getElementById("sheetbg");if(e)e.remove()}
+
+/* ---------- events ---------- */
+document.addEventListener("click",function(ev){
+  var el=ev.target.closest("[data-go],[data-sheet],[data-close],[data-pick],[data-kind],[data-addblk],[data-delblk],"+
+    "[data-toggledone],[data-submit],[data-openday],[data-del],[data-addty],[data-delty],[data-tyq],"+
+    "[data-addsub],[data-delsub],[data-addmat],[data-delmat],[data-matq],[data-addms],[data-delms],[data-export],[data-import]");
+  if(!el)return;
+  var d=el.dataset;
+  if(d.go){go(d.go);return}
+  if(d.sheet){showSheet(d.sheet);return}
+  if(d.close!==undefined){closeSheet();return}
+  if(d.pick){ if(d.cur==="1")S.week.current=d.pick; else S.week.next=d.pick;
+    save();closeSheet();render();return}
+  if(d.kind){planKind=d.kind;render();return}
+  if(d.addblk){S.dayTemplates[planKind].push({id:uid(),start:"",end:""});save();render();return}
+  if(d.delblk){S.dayTemplates[planKind].splice(+d.delblk,1);save();render();return}
+  if(d.toggledone){F.done=!F.done;render();return}
+  if(d.submit){submit();return}
+  if(d.openday){recOpen=recOpen===d.openday?null:d.openday;render();return}
+  if(d.del){S.records=S.records.filter(function(r){return r.id!==d.del});save();render();return}
+  if(d.addty){S.types.push({name:"新しい教材",color:"#8B5CF6",quota:true});save();render();return}
+  if(d.delty){S.types.splice(+d.delty,1);save();render();return}
+  if(d.tyq){var ty=S.types[+d.tyq];ty.quota=!ty.quota;save();render();return}
+  if(d.addsub){S.subjects.push({code:String(S.subjects.length+1).padStart(2,"0"),name:"新科目"});save();render();return}
+  if(d.delsub){S.subjects.splice(+d.delsub,1);save();render();return}
+  if(d.matq){var mq=S.materials[+d.matq];mq.quota=!isQuota(mq);save();render();return}
+  if(d.addmat){var s0=S.subjects[0],t0=S.types[0];if(!s0||!t0)return;
+    S.materials.push({id:s0.code+"_"+t0.name,subjectCode:s0.code,type:t0.name,targetLaps:1,lap1Problems:""});
+    save();render();return}
+  if(d.delmat){S.materials.splice(+d.delmat,1);save();render();return}
+  if(d.addms){S.milestones.push({id:uid(),name:"第"+(S.milestones.length+1)+"MS",date:todayISO(),plan:"",review:"",nextFocus:""});save();render();return}
+  if(d.delms){S.milestones=S.milestones.filter(function(m){return m.id!==d.delms});save();render();return}
+  if(d.export){doExport();return}
+  if(d.import){document.getElementById("fileIn").click();return}
+});
+document.addEventListener("change",function(ev){
+  var el=ev.target,d=el.dataset;
+  if(el.id==="fileIn"&&el.files[0]){doImport(el.files[0]);return}
+  if(d.wp!==undefined){S.weekPlan[d.wp]=el.value;save();render();return}
+  if(d.f&&d.blk!==undefined){S.dayTemplates[planKind][+d.blk][d.f]=el.value.replace(/[^0-9]/g,"");save();render();return}
+  if(d.mat!==undefined&&(d.f==="subjectCode"||d.f==="type")){
+    var mv=S.materials[+d.mat]; mv[d.f]=el.value; mv.id=mv.subjectCode+"_"+mv.type;
+    save();render();return}
+  if(d.f&&["date","subjectCode","type","problems","hhmm","memo"].indexOf(d.f)>=0&&!d.mat&&!d.sub&&!d.ty&&!d.msx){
+    F[d.f]=el.value; if(d.f==="subjectCode"||d.f==="type")render(); return}
+});
+document.addEventListener("input",function(ev){
+  var el=ev.target,d=el.dataset;
+  if(d.week){S.week[d.week]=el.value;save();return}
+  if(d.ms){var m=S.milestones.filter(function(x){return x.id===d.ms})[0];if(m){m[d.f]=el.value;save()}return}
+  if(d.msx){var m2=S.milestones.filter(function(x){return x.id===d.msx})[0];if(m2){m2[d.f]=el.value;save()}return}
+  if(d.cfg){var v=el.value; if(d.cfg==="spareDays"||d.cfg==="targetHours")v=+v.replace(/[^0-9]/g,"")||0;
+    S.config[d.cfg]=v;save();return}
+  if(d.ty!==undefined&&d.f){S.types[+d.ty][d.f]=el.value;save();return}
+  if(d.sub!==undefined&&d.f){S.subjects[+d.sub][d.f]=el.value;save();return}
+  if(d.mat!==undefined&&d.f){var mm=S.materials[+d.mat];
+    mm[d.f]=(d.f==="targetLaps")?(+el.value.replace(/[^0-9]/g,"")||0):el.value.replace(/[^0-9]/g,"");save();return}
+  if(d.f&&["problems","hhmm","memo"].indexOf(d.f)>=0&&d.blk===undefined){F[d.f]=el.value;return}
+});
+
+function submit(){
+  if(!F.date)F.date=todayISO();
+  if(!F.subjectCode)F.subjectCode=(S.subjects[0]||{}).code||"";
+  if(!F.type)F.type=(S.types[0]||{}).name||"";
+  var p=+String(F.problems).replace(/[^0-9]/g,"")||0;
+  var mi=parseHHMM(F.hhmm);
+  if(!p&&!mi&&!F.done){alert("問題数か時間を入れてください。");return}
+  var lap=lapSegments(S.records,F.subjectCode,F.type).length;
+  var op=openSeg(F.subjectCode,F.type);
+  S.records.unshift({id:uid(),date:F.date,subjectCode:F.subjectCode,type:F.type,
+    lap:op?lap:lap+1,problems:p,wrong:0,minutes:mi,done:!!F.done,noPredict:false,memo:(F.memo||"").trim()});
+  F.problems="";F.hhmm="";F.done=false;F.memo="";
+  save();render();
+}
+function doExport(){
+  var blob=new Blob([JSON.stringify(Object.assign({app:"sharoushi-study-manager",version:7},S),null,2)],{type:"application/json"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="ssm-backup-"+todayISO()+".json";a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+}
+function doImport(file){
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{ S=migrate(JSON.parse(rd.result)); fill(); save(); render(); alert("読み込みました。"); }
+    catch(e){ alert("読み込めませんでした。JSONを確認してください。"); }
+  };
+  rd.readAsText(file);
+}
+
+load();render();
+</script>
+</body>
+</html>
