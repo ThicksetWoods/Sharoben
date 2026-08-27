@@ -120,6 +120,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
   border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
 .tchip b{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
 .tchip b.ok{color:var(--good)}
+.tchip s.dsg{text-decoration:none;color:var(--faint);font-size:10px;margin-left:3px}
 .vrow .nm{white-space:normal;overflow:visible}
 .tpick{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);
   border:1px solid var(--line);border-radius:9px;padding:6px 10px;background:var(--card)}
@@ -164,7 +165,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.20
+   しゃろべん記録 v6.30
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -261,7 +262,7 @@ function migrate(o){
   if(d.config.gapWarnPct==null)d.config.gapWarnPct=30;
   if(!THEMES[d.config.theme])d.config.theme="kinari";
   d.config.gradient=!!d.config.gradient;
-  d.results=o.results||[];
+  d.results=JSON.parse(JSON.stringify(o.results||[]));
   d.milestones=(o.milestones||[]).map(function(m){
     return {id:m.id||uid(),name:m.name,date:m.date,plan:m.plan||"",review:m.review||"",
             nextFocus:m.nextFocus||"",targets:m.targets||null}});
@@ -349,7 +350,7 @@ function migrate(o){
     }).filter(Boolean);
     if(arr.length)d.weekPlan[k]=arr;
   });
-  d.week=o.week||{start:"",current:"",next:"",memo:""};
+  d.week=JSON.parse(JSON.stringify(o.week||{start:"",current:"",next:"",memo:""}));
   if(d.week.current&&byCode[d.week.current])d.week.current=byCode[d.week.current];
   if(d.week.next&&byCode[d.week.next])d.week.next=byCode[d.week.next];
   return d;
@@ -358,11 +359,12 @@ function isV6(o){return o&&o.version>=8&&Array.isArray(o.subjects)&&o.subjects.l
 function adopt(o){
   if(isV6(o)){
     var d=defaults();
+    var cp=function(x,fb){return x==null?fb:JSON.parse(JSON.stringify(x))};
     ["subjects","types","materials","records","milestones","results","timeTemplates"].forEach(function(k){
-      d[k]=o[k]||[]});
-    d.config=Object.assign(d.config,o.config||{});
-    d.weekPlan=o.weekPlan||{}; d.weekTemplate=o.weekTemplate||{};
-    d.week=o.week||d.week;
+      d[k]=cp(o[k],[])});
+    d.config=Object.assign(d.config,cp(o.config,{}));
+    d.weekPlan=cp(o.weekPlan,{}); d.weekTemplate=cp(o.weekTemplate,{});
+    d.week=cp(o.week,d.week);
     if(!THEMES[d.config.theme])d.config.theme="kinari";
     return d;
   }
@@ -604,17 +606,42 @@ function weekTypeDays(){
   return cnt;
 }
 /* 今週の科目 × 種別 → {typeId,name,color,days,lap,perDay,quota} */
+/* 今週の残り該当日数（今日を含む） */
+function daysLeftForType(ti){
+  var ws=S.week.start||weekStart(todayISO()), t=todayISO(), n=0;
+  WEEK_ORDER.forEach(function(d,i){
+    var iso=addD(ws,i);
+    if(iso<t)return;
+    if(dayTypes(d).indexOf(ti)>=0)n++;
+  });
+  return n;
+}
 function weekQuota(){
   var cur=S.week.current, cnt=weekTypeDays(), out=[];
   Object.keys(cnt).forEach(function(ti){
     var t=typ(ti); if(!t)return;
-    var row={typeId:ti,name:t.name,color:t.color,days:cnt[ti],lap:null,perDay:null,
+    var row={typeId:ti,name:t.name,color:t.color,days:cnt[ti],lap:null,
+             perDay:null,       /* 設計：1周ぶん ÷ 週内日数（固定） */
+             leftDays:daysLeftForType(ti),
+             rest:null,         /* 今の周の残り問題数 */
+             perDayRest:null,   /* 残り割：残り ÷ 残り日数 */
+             lapDone:false,     /* 今週この教材の周が完了済み */
              quota:!!(t.quota&&!t.hidden)};
     if(cur&&row.quota){
       var m=S.materials.filter(function(x){return x.subjectId===cur&&x.typeId===ti&&!matHidden(x)})[0];
       if(m){
-        var p=progress(m,S.records);
-        if(p.predicted&&p.predicted>0){ row.lap=p.predicted; row.perDay=Math.ceil(p.predicted/row.days); }
+        var p=progress(m,scoped());
+        if(p.predicted&&p.predicted>0){
+          row.lap=p.predicted;
+          row.perDay=Math.ceil(p.predicted/row.days);
+          /* 目標周回に到達していれば、その週はもう解く必要がない */
+          if(p.target&&p.maxCompleted>=p.target){ row.lapDone=true; row.rest=0; row.perDayRest=0; }
+          else{
+            var op=openSeg(cur,ti);
+            row.rest=Math.max(0,p.predicted-(op?op.problems:0));
+            row.perDayRest=row.leftDays?Math.ceil(row.rest/row.leftDays):row.rest;
+          }
+        }
       }
     }
     out.push(row);
@@ -629,6 +656,13 @@ function weekQuotaOn(iso){
   var rows=dayTypes(dow(iso)).map(weekQuotaFor).filter(Boolean);
   var sum=0,any=false;
   rows.forEach(function(r){ if(r.perDay!=null){sum+=r.perDay;any=true} });
+  return any?sum:null;
+}
+/* 残り割の合計（今日ぶん） */
+function weekRestOn(iso){
+  var rows=dayTypes(dow(iso)).map(weekQuotaFor).filter(Boolean);
+  var sum=0,any=false;
+  rows.forEach(function(r){ if(r.perDayRest!=null){sum+=r.perDayRest;any=true} });
   return any?sum:null;
 }
 function gapWarnPct(){return Math.max(0,+S.config.gapWarnPct||0)}
@@ -842,14 +876,22 @@ function solvedOn(iso,tid){
 function typeChips(d,iso,withActual){
   var ids=dayTypes(d);
   if(!ids.length)return '<span class="sm">—</span>';
+  var isToday=(iso===todayISO());
   return ids.map(function(id){
-    var wq=weekQuotaFor(id), n=wq&&wq.perDay!=null?wq.perDay:null;
+    var wq=weekQuotaFor(id);
+    var n=wq&&wq.perDay!=null?wq.perDay:null;          /* 設計 */
+    var rst=wq&&wq.perDayRest!=null?wq.perDayRest:null; /* 残り */
     var body='';
     if(withActual){
       var got=solvedOn(iso,id);
-      if(n!=null)body='<b class="num'+(got>=n?" ok":"")+'">'+got+'/'+n+'</b>';
+      if(wq&&wq.lapDone)body='<b class="num ok">完了</b>';
+      else if(rst!=null)body='<b class="num'+(rst===0?" ok":"")+'">'+got+'</b>'+
+        '<s class="dsg num">'+(rst===0?"あと0":"あと"+rst)+'</s>';
       else if(got)body='<b class="num">'+got+'</b>';
-    }else if(n!=null){ body='<b class="num">'+n+'</b>'; }
+    }else if(n!=null){
+      body='<b class="num">'+n+'</b>';
+      if(isToday&&rst!=null&&rst!==n)body+='<s class="dsg num">残'+rst+'</s>';
+    }
     return '<span class="tchip"><i class="dot" style="background:'+tColor(id)+'"></i>'+esc(tName(id))+body+'</span>';
   }).join("");
 }
@@ -892,13 +934,17 @@ function vesselCard(mode){
         '<span class="nm">'+esc(r.name)+'</span>'+
         '<span class="sm num">'+r.days+'日</span>'+
         '<span class="pill num">'+(r.lap!=null?r.lap+"問／周":"周ぶん未設定")+'</span>'+
-        '<span class="num" style="font-size:13px;min-width:44px;text-align:right;font-weight:700">'+
-          (r.perDay!=null?r.perDay+"問":"—")+'</span></div>';
+        '<span class="num sm" style="min-width:38px;text-align:right">'+
+          (r.perDay!=null?"設計"+r.perDay:"—")+'</span>'+
+        '<span class="num" style="font-size:13px;min-width:48px;text-align:right;font-weight:700;color:'+
+          (r.lapDone?"var(--good)":"var(--ink)")+'">'+
+          (r.lapDone?"完了":(r.perDayRest!=null?"残"+r.perDayRest:"—"))+'</span></div>';
     });
     html+='</div>';
   }
-  html+='<div class="hint">1科目1週間。各教材の「1周ぶん ÷ その教材に割り当てた日数」が、その日に解く数です。'+
-    '進捗では動きません（週の設計図なので固定）。曜日には教材を複数置けます。</div></div>';
+  html+='<div class="hint">1科目1週間。<b>設計</b>＝1周ぶん ÷ その教材に割り当てた日数（固定・週の設計図）。'+
+    '<b>残</b>＝今の周の残り ÷ 今週の残り該当日数（実績で動く・今日の指示）。'+
+    '目標周回に届いた教材は「完了」になり、その週はもう0問です。曜日には教材を複数置けます。</div></div>';
   return html;
 }
 function todayVessel(ws,t,cur){
@@ -906,15 +952,16 @@ function todayVessel(ws,t,cur){
   var tt=ttForDow(d), mn=ttMinutes(tt);
   var wq=weekQuotaOn(t), dq=dailyQuota();
   var html='<div class="card"><h2>今日の器'+(cur?'（'+esc(sName(cur))+'）':'')+'</h2>';
+  var rest=weekRestOn(t);
   var got=solvedTotalOn(t)||0;
-  var doneAll=(wq!=null&&got>=wq);
+  var doneAll=(rest===0);
   html+='<div class="row vrow"><span class="nm" style="font-weight:700">'+WD[d]+
     '<span class="sm" style="margin-left:6px">'+md(t)+'</span>'+
     '<span class="tchips">'+typeChips(d,t,true)+'</span></span>'+
     '<span class="pill num">'+(mn?fmtHMs(mn):"—")+'</span>'+
-    '<span class="num" style="font-size:13px;min-width:56px;text-align:right;font-weight:700'+
-      ';color:'+(wq==null?"var(--faint)":(doneAll?"var(--good)":"var(--ink)"))+'">'+
-      (wq!=null?got+"/"+wq+"問":(got?got+"問":"—"))+'</span></div>';
+    '<span class="num" style="font-size:13px;min-width:66px;text-align:right;font-weight:700'+
+      ';color:'+(rest==null?"var(--faint)":(doneAll?"var(--good)":"var(--ink)"))+'">'+
+      (rest!=null?got+"問<span class=\'sm\' style=\'font-weight:400\'><br>あと"+rest+"</span>":(got?got+"問":"—"))+'</span></div>';
   /* 差分 */
   var gapTxt="—",gapColor="var(--faint)",gapNote="";
   if(dq!=null&&wq!=null&&dq>0){
@@ -930,16 +977,23 @@ function todayVessel(ws,t,cur){
   else { gapNote="MSのノルマが算出できません（マイルストーンか1周目問題数を確認）。"; }
   html+='<div class="tiles" style="margin-top:14px">'+
     tile(dq==null?"—":dq,"問","MS：今日のノルマ")+
-    tile(wq==null?"—":wq,"問","週：今日の教材")+
+    tile(wq==null?"—":wq,"問","週：設計")+
     '<div class="tile"><div class="v num" style="color:'+gapColor+'">'+esc(gapTxt)+
-      '<span class="u">問</span></div><div class="k">差分</div></div>'+
+      '<span class="u">問</span></div><div class="k">差分（設計比）</div></div>'+
+    '</div>';
+  html+='<div class="tiles two">'+
+    '<div class="tile"><div class="v num" style="color:'+(rest===0?"var(--good)":"var(--ink)")+'">'+
+      (rest==null?"—":rest)+'<span class="u">問</span></div>'+
+      '<div class="k">'+(rest===0?"今日はここまで":"このあと解く数")+'</div></div>'+
+    tile(got,"問","今日の実績")+
     '</div>';
   html+='<div class="tiles two">'+
     tile(mn?fmtHM(mn):"—","","今日の確保時間")+
     tile(wq&&mn?Math.round(mn*60/wq):"—","秒","1問の持ち時間")+'</div>';
   html+='<div class="hint">'+esc(gapNote)+'<br>'+
-    'MS側は教材を問わない配分、週側は今週この科目のこの教材で解く数です。'+
-    '差が開いた週は、週の組み方が期限に対して緩いか、寄せすぎています。</div></div>';
+    '<b>設計</b>＝1周ぶん ÷ 週内の該当日数（固定）。週の組み方が期限に合っているかを、MSの配分と比べるための数字です。<br>'+
+    '<b>あと◯</b>＝今の周の残り ÷ 今週の残り該当日数。記録を入れると減っていきます。'+
+    '目標周回に届いた教材は、その週はもう0問（完了）になります。</div></div>';
   return html;
 }
 function tile(v,u,k){return '<div class="tile"><div class="v num">'+esc(v)+
@@ -1470,7 +1524,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.20</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.30</div>';
   return html;
 }
 
