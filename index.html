@@ -549,14 +549,27 @@ function vPlan(){
 }
 
 /* ---------- 記録 ---------- */
-var F={date:"",subjectCode:"",type:"",problems:"",hhmm:"",done:false,memo:""};
+var F={date:"",subjectCode:"",type:"",problems:"",times:[""],done:false,memo:"",loaded:""};
 var recOpen=null;
 function vRec(){
   if(!F.date)F.date=todayISO();
   if(!F.subjectCode)F.subjectCode=(S.subjects[0]||{}).code||"";
   if(!F.type)F.type=(S.types[0]||{}).name||"";
+  if(!F.times||!F.times.length)F.times=[""];
   var op=openSeg(F.subjectCode,F.type);
   var lapNo=lapSegments(S.records,F.subjectCode,F.type).length+(op?0:1);
+  /* 同じ日・同じ科目・同じ教材の既存行 → 上書き対象。切り替えたら自動で読み込む */
+  var ex=S.records.filter(function(r){return r.date===F.date&&r.subjectCode===F.subjectCode&&r.type===F.type})[0];
+  var sig=F.date+"|"+F.subjectCode+"|"+F.type;
+  if(F.loaded!==sig){
+    F.loaded=sig;
+    if(ex){
+      F.problems=String(ex.problems||"");
+      F.times=[ex.minutes?pad(Math.floor(ex.minutes/60))+pad(ex.minutes%60):""];
+      F.done=!!ex.done; F.memo=ex.memo||"";
+    }else{ F.problems="";F.times=[""];F.done=false;F.memo=""; }
+  }
+  var tsum=F.times.reduce(function(a,s){return a+parseHHMM(s)},0);
 
   var html='<div class="head"><div><div class="eyebrow">数字ふたつと、チェックひとつ</div><h1>記録</h1></div></div>';
   html+='<div class="card">'+
@@ -569,15 +582,26 @@ function vRec(){
         S.types.map(function(ty){return '<option value="'+esc(ty.name)+'"'+(F.type===ty.name?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
       '</select></label>'+
     '</div>'+
-    '<div class="g2">'+
-      '<label class="f"><span>解いた問題数</span><input class="inp num" inputmode="numeric" data-f="problems" value="'+esc(F.problems)+'" placeholder="アプリの累計"></label>'+
-      '<label class="f"><span>学習時間 HHMM</span><input class="inp num" inputmode="numeric" maxlength="4" data-f="hhmm" value="'+esc(F.hhmm)+'" placeholder="0130"></label>'+
-    '</div>'+
+    '<label class="f"><span>解いた問題数（その日の累計をそのまま）</span>'+
+      '<input class="inp num" inputmode="numeric" data-f="problems" value="'+esc(F.problems)+'" placeholder="アプリに出ている数字"></label>'+
+    '<div style="margin-bottom:12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'+
+        '<span style="font-size:12px;color:var(--sub)">学習時間 HHMM</span>'+
+        '<span class="num" style="font-size:12.5px;color:'+(tsum?"var(--ink)":"var(--faint)")+';font-weight:600">合計 '+(tsum?fmtHM(tsum):"—")+'</span></div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:7px">'+
+      F.times.map(function(t,i){
+        return '<div style="display:flex;align-items:center;gap:4px">'+
+          '<input class="inp num" style="width:80px;padding:10px" inputmode="numeric" maxlength="4" data-tm="'+i+'" value="'+esc(t)+'" placeholder="0130">'+
+          (F.times.length>1?'<button class="x" data-deltm="'+i+'">−</button>':'')+'</div>'}).join("")+
+      '<button class="add" style="width:46px;padding:10px 0" data-addtm="1">＋</button>'+
+      '</div></div>'+
     '<label class="f"><span>メモ（次回の引き継ぎ）</span><input class="inp" data-f="memo" value="'+esc(F.memo)+'" placeholder="例：次は312番から"></label>'+
     '<button class="toggle'+(F.done?" on":"")+'" data-toggledone="1">'+(F.done?"✓ この周を完了にする":"この周は継続中")+'</button>'+
     '<div class="hint">いま '+esc(sName(F.subjectCode))+'・'+esc(F.type)+' は '+lapNo+'周目'+
-      (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。</div>'+
-    '<div style="margin-top:14px"><button class="primary" data-submit="1">記録する</button></div>'+
+      (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。'+
+      (ex?'<br><b style="color:var(--warn)">この日のこの教材には既に記録があります。保存すると上書きします。</b>'
+         :'<br>細切れに解いた日も、夜にアプリの累計を写すだけで足ります。')+'</div>'+
+    '<div style="margin-top:14px"><button class="primary" data-submit="1">'+(ex?"上書きする":"記録する")+'</button></div>'+
   '</div>';
 
   /* 履歴 */
@@ -825,7 +849,7 @@ function closeSheet(){sheet=null;var e=document.getElementById("sheetbg");if(e)e
 /* ---------- events ---------- */
 document.addEventListener("click",function(ev){
   var el=ev.target.closest("[data-go],[data-sheet],[data-close],[data-pick],[data-kind],[data-addblk],[data-delblk],"+
-    "[data-toggledone],[data-submit],[data-openday],[data-del],[data-addty],[data-delty],[data-tyq],"+
+    "[data-toggledone],[data-submit],[data-openday],[data-del],[data-addtm],[data-deltm],[data-addty],[data-delty],[data-tyq],"+
     "[data-addsub],[data-delsub],[data-addmat],[data-delmat],[data-matq],[data-addms],[data-delms],[data-export],[data-import]");
   if(!el)return;
   var d=el.dataset;
@@ -837,6 +861,8 @@ document.addEventListener("click",function(ev){
   if(d.kind){planKind=d.kind;render();return}
   if(d.addblk){S.dayTemplates[planKind].push({id:uid(),start:"",end:""});save();render();return}
   if(d.delblk){S.dayTemplates[planKind].splice(+d.delblk,1);save();render();return}
+  if(d.addtm){F.times.push("");render();return}
+  if(d.deltm){F.times.splice(+d.deltm,1);if(!F.times.length)F.times=[""];render();return}
   if(d.toggledone){F.done=!F.done;render();return}
   if(d.submit){submit();return}
   if(d.openday){recOpen=recOpen===d.openday?null:d.openday;render();return}
@@ -864,8 +890,9 @@ document.addEventListener("change",function(ev){
   if(d.mat!==undefined&&(d.f==="subjectCode"||d.f==="type")){
     var mv=S.materials[+d.mat]; mv[d.f]=el.value; mv.id=mv.subjectCode+"_"+mv.type;
     save();render();return}
-  if(d.f&&["date","subjectCode","type","problems","hhmm","memo"].indexOf(d.f)>=0&&!d.mat&&!d.sub&&!d.ty&&!d.msx){
-    F[d.f]=el.value; if(d.f==="subjectCode"||d.f==="type")render(); return}
+  if(d.tm!==undefined){F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");render();return}
+  if(d.f&&["date","subjectCode","type","problems","memo"].indexOf(d.f)>=0&&!d.mat&&!d.sub&&!d.ty&&!d.msx){
+    F[d.f]=el.value; if(d.f!=="problems"&&d.f!=="memo"){F.loaded="";render()} return}
 });
 document.addEventListener("input",function(ev){
   var el=ev.target,d=el.dataset;
@@ -878,7 +905,8 @@ document.addEventListener("input",function(ev){
   if(d.sub!==undefined&&d.f){S.subjects[+d.sub][d.f]=el.value;save();return}
   if(d.mat!==undefined&&d.f){var mm=S.materials[+d.mat];
     mm[d.f]=(d.f==="targetLaps")?(+el.value.replace(/[^0-9]/g,"")||0):el.value.replace(/[^0-9]/g,"");save();return}
-  if(d.f&&["problems","hhmm","memo"].indexOf(d.f)>=0&&d.blk===undefined){F[d.f]=el.value;return}
+  if(d.tm!==undefined){F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");return}
+  if(d.f&&["problems","memo"].indexOf(d.f)>=0&&d.blk===undefined){F[d.f]=el.value;return}
 });
 
 function submit(){
@@ -886,13 +914,18 @@ function submit(){
   if(!F.subjectCode)F.subjectCode=(S.subjects[0]||{}).code||"";
   if(!F.type)F.type=(S.types[0]||{}).name||"";
   var p=+String(F.problems).replace(/[^0-9]/g,"")||0;
-  var mi=parseHHMM(F.hhmm);
+  var mi=(F.times||[]).reduce(function(a,s){return a+parseHHMM(s)},0);
   if(!p&&!mi&&!F.done){alert("問題数か時間を入れてください。");return}
-  var lap=lapSegments(S.records,F.subjectCode,F.type).length;
-  var op=openSeg(F.subjectCode,F.type);
-  S.records.unshift({id:uid(),date:F.date,subjectCode:F.subjectCode,type:F.type,
-    lap:op?lap:lap+1,problems:p,wrong:0,minutes:mi,done:!!F.done,noPredict:false,memo:(F.memo||"").trim()});
-  F.problems="";F.hhmm="";F.done=false;F.memo="";
+  var ex=S.records.filter(function(r){return r.date===F.date&&r.subjectCode===F.subjectCode&&r.type===F.type})[0];
+  if(ex){
+    ex.problems=p; ex.minutes=mi; ex.done=!!F.done; ex.memo=(F.memo||"").trim();
+  }else{
+    var lap=lapSegments(S.records,F.subjectCode,F.type).length;
+    var op=openSeg(F.subjectCode,F.type);
+    S.records.unshift({id:uid(),date:F.date,subjectCode:F.subjectCode,type:F.type,
+      lap:op?lap:lap+1,problems:p,wrong:0,minutes:mi,done:!!F.done,noPredict:false,memo:(F.memo||"").trim()});
+  }
+  F.loaded="";           /* 保存後に読み直す */
   save();render();
 }
 function doExport(){
