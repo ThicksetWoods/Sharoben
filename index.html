@@ -121,6 +121,11 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 .tchip b{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
 .tchip b.ok{color:var(--good)}
 .tchip s.dsg{text-decoration:none;color:var(--faint);font-size:10px;margin-left:3px}
+.qcard{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  background:var(--inpbg);border:1px solid var(--line);border-radius:10px;
+  padding:4px 9px;min-width:52px;flex:none;line-height:1.15}
+.qcard .ql{font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+.qcard .qv{font-size:17px;font-weight:800;letter-spacing:-.02em}
 .vrow .nm{white-space:normal;overflow:visible}
 .tpick{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);
   border:1px solid var(--line);border-radius:9px;padding:6px 10px;background:var(--card)}
@@ -165,7 +170,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.30
+   しゃろべん記録 v6.32
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -885,9 +890,9 @@ function typeChips(d,iso,withActual){
     if(withActual){
       var got=solvedOn(iso,id);
       if(wq&&wq.lapDone)body='<b class="num ok">完了</b>';
-      else if(rst!=null)body='<b class="num'+(rst===0?" ok":"")+'">'+got+'</b>'+
-        '<s class="dsg num">'+(rst===0?"あと0":"あと"+rst)+'</s>';
-      else if(got)body='<b class="num">'+got+'</b>';
+      else if(rst!=null)body='<b class="num'+(rst===0?" ok":"")+'">'+rst+'</b>'+
+        '<s class="dsg num">済'+got+'</s>';
+      else if(got)body='<s class="dsg num">済'+got+'</s>';
     }else if(n!=null){
       body='<b class="num">'+n+'</b>';
       if(isToday&&rst!=null&&rst!==n)body+='<s class="dsg num">残'+rst+'</s>';
@@ -958,10 +963,12 @@ function todayVessel(ws,t,cur){
   html+='<div class="row vrow"><span class="nm" style="font-weight:700">'+WD[d]+
     '<span class="sm" style="margin-left:6px">'+md(t)+'</span>'+
     '<span class="tchips">'+typeChips(d,t,true)+'</span></span>'+
+    '<span class="qcard"><span class="ql">ノルマ</span>'+
+      '<span class="qv num" style="color:'+(rest===0?"var(--good)":"var(--ink)")+'">'+
+      (rest==null?"—":rest)+'</span></span>'+
     '<span class="pill num">'+(mn?fmtHMs(mn):"—")+'</span>'+
-    '<span class="num" style="font-size:13px;min-width:66px;text-align:right;font-weight:700'+
-      ';color:'+(rest==null?"var(--faint)":(doneAll?"var(--good)":"var(--ink)"))+'">'+
-      (rest!=null?got+"問<span class=\'sm\' style=\'font-weight:400\'><br>あと"+rest+"</span>":(got?got+"問":"—"))+'</span></div>';
+    '<span class="num" style="font-size:13px;min-width:46px;text-align:right;font-weight:700'+
+      ';color:'+(doneAll?"var(--good)":"var(--ink)")+'">'+got+'<span class="u">問</span></span></div>';
   /* 差分 */
   var gapTxt="—",gapColor="var(--faint)",gapNote="";
   if(dq!=null&&wq!=null&&dq>0){
@@ -976,23 +983,18 @@ function todayVessel(ws,t,cur){
   }else if(wq==null){ gapNote="今日はノルマ対象の教材が置かれていません。"; }
   else { gapNote="MSのノルマが算出できません（マイルストーンか1周目問題数を確認）。"; }
   html+='<div class="tiles" style="margin-top:14px">'+
-    tile(dq==null?"—":dq,"問","MS：今日のノルマ")+
+    tile(dq==null?"—":dq,"問","MS：ノルマ")+
     tile(wq==null?"—":wq,"問","週：設計")+
     '<div class="tile"><div class="v num" style="color:'+gapColor+'">'+esc(gapTxt)+
       '<span class="u">問</span></div><div class="k">差分（設計比）</div></div>'+
     '</div>';
-  html+='<div class="tiles two">'+
-    '<div class="tile"><div class="v num" style="color:'+(rest===0?"var(--good)":"var(--ink)")+'">'+
-      (rest==null?"—":rest)+'<span class="u">問</span></div>'+
-      '<div class="k">'+(rest===0?"今日はここまで":"このあと解く数")+'</div></div>'+
-    tile(got,"問","今日の実績")+
-    '</div>';
+
   html+='<div class="tiles two">'+
     tile(mn?fmtHM(mn):"—","","今日の確保時間")+
     tile(wq&&mn?Math.round(mn*60/wq):"—","秒","1問の持ち時間")+'</div>';
   html+='<div class="hint">'+esc(gapNote)+'<br>'+
     '<b>設計</b>＝1周ぶん ÷ 週内の該当日数（固定）。週の組み方が期限に合っているかを、MSの配分と比べるための数字です。<br>'+
-    '<b>あと◯</b>＝今の周の残り ÷ 今週の残り該当日数。記録を入れると減っていきます。'+
+    'チップの<b>太字</b>＝今日のノルマ（今の周の残り ÷ 今週の残り該当日数）。記録を入れると減ります。<b>済</b>＝今日解いた数。'+
     '目標周回に届いた教材は、その週はもう0問（完了）になります。</div></div>';
   return html;
 }
@@ -1524,7 +1526,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.30</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.32</div>';
   return html;
 }
 
