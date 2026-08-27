@@ -107,11 +107,19 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 .okbox{background:#EDF6F1;border:1px solid #C6E4D5;border-radius:12px;padding:12px 14px;
   font-size:13px;margin-bottom:12px;color:#22392F}
 
+/* MS target snapshot */
+.tgt{border:1px solid var(--line2);border-radius:10px;padding:9px 11px;margin-bottom:11px;background:var(--inpbg)}
+.tgtl{display:block;font-size:11px;color:var(--sub);margin-bottom:5px}
+.tgtrow{display:flex;gap:8px;align-items:baseline;font-size:12px;line-height:1.6;color:var(--ink)}
+.tgtrow b{flex:none;min-width:30px;font-size:12.5px;font-weight:800}
+.tgtrow span{color:var(--sub)}
+
 /* type chips & pickers */
 .tchips{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:7px;vertical-align:middle}
 .tchip{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--sub);
   border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap}
 .tchip b{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
+.tchip b.ok{color:var(--good)}
 .vrow .nm{white-space:normal;overflow:visible}
 .tpick{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);
   border:1px solid var(--line);border-radius:9px;padding:6px 10px;background:var(--card)}
@@ -156,7 +164,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.10
+   しゃろべん記録 v6.20
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -255,7 +263,8 @@ function migrate(o){
   d.config.gradient=!!d.config.gradient;
   d.results=o.results||[];
   d.milestones=(o.milestones||[]).map(function(m){
-    return {id:m.id||uid(),name:m.name,date:m.date,plan:m.plan||"",review:m.review||"",nextFocus:m.nextFocus||""}});
+    return {id:m.id||uid(),name:m.name,date:m.date,plan:m.plan||"",review:m.review||"",
+            nextFocus:m.nextFocus||"",targets:m.targets||null}});
 
   /* --- 科目 --- */
   var byCode={};
@@ -388,6 +397,47 @@ function fill(){
   syncWeek();
 }
 function weekStart(iso){var d=dow(iso);return addD(iso,-((d-2+7)%7))}
+/* 目標周回の一覧を短くたたむ：全教材／種別まるごと／科目まるごと */
+function compressTargets(group,live){
+  if(group.length===live.length)return ["全教材"];
+  var inSet={}; group.forEach(function(m){inSet[m.id]=1});
+  var out=[], used={};
+  /* 種別まるごと */
+  S.types.forEach(function(t){
+    var all=live.filter(function(m){return m.typeId===t.id});
+    if(all.length>1&&all.every(function(m){return inSet[m.id]})){
+      out.push(t.name+"（全科目）"); all.forEach(function(m){used[m.id]=1});
+    }
+  });
+  /* 科目まるごと */
+  S.subjects.forEach(function(sb){
+    var all=live.filter(function(m){return m.subjectId===sb.id&&!used[m.id]});
+    if(all.length>1&&all.every(function(m){return inSet[m.id]})){
+      out.push(sb.name+"（全教材）"); all.forEach(function(m){used[m.id]=1});
+    }
+  });
+  group.forEach(function(m){
+    if(used[m.id])return;
+    out.push(sName(m.subjectId)+"_"+tName(m.typeId));
+  });
+  return out;
+}
+/* MSが切り替わったら、終わったMSに「そのときの目標周回」を焼き付ける */
+function snapshotMS(){
+  var t=todayISO(), changed=false;
+  msWindows().forEach(function(w){
+    if(t<=w.to)return;                       /* まだ終わっていない */
+    if(w.ms.targets)return;                  /* 既に焼き付け済み */
+    var live=S.materials.filter(function(m){return !matHidden(m)&&(+m.targetLaps||0)>0});
+    var groups={};
+    live.forEach(function(m){ (groups[+m.targetLaps]=groups[+m.targetLaps]||[]).push(m) });
+    w.ms.targets=Object.keys(groups).sort(function(a,b){return a-b}).map(function(n){
+      return {laps:+n,items:compressTargets(groups[n],live)};
+    });
+    changed=true;
+  });
+  if(changed)save();
+}
 function syncWeek(){
   var ws=weekStart(todayISO());
   if(S.week.start!==ws){
@@ -429,22 +479,63 @@ function lapSegments(recs,sid,tid){
   segs.forEach(function(s,i){s.lap=i+1});
   return segs;
 }
-function openSeg(sid,tid){var s=lapSegments(S.records,sid,tid);var l=s[s.length-1];return l&&!l.done?l:null}
+/* 起算日以降の記録だけを見る（前年度ぶんを混ぜない） */
+function scoped(){
+  var st=S.config.startDate;
+  return st?S.records.filter(function(r){return r.date>=st}):S.records;
+}
+function openSeg(sid,tid){var s=lapSegments(scoped(),sid,tid);var l=s[s.length-1];return l&&!l.done?l:null}
 function lastDone(sid,tid){
-  var s=lapSegments(S.records,sid,tid).filter(function(x){return x.done});
+  var s=lapSegments(scoped(),sid,tid).filter(function(x){return x.done});
   return s.length?s[s.length-1].last:null;
 }
-function progress(mat,recs){
+
+/* ---------- MSの窓 ----------
+   窓は [開始, 実効締切] 。最初のMSの開始＝起算日、以後は前MSの実効締切の翌日。
+   周がMSをまたいだ場合は「完了日が属するMS」に数える。 */
+function msWindows(){
+  var st=S.config.startDate;
+  var ms=S.milestones.slice().sort(function(a,b){return a.date<b.date?-1:1});
+  var out=[],from=st;
+  ms.forEach(function(m){
+    var to=effDL(m.date);
+    out.push({id:m.id,name:m.name,from:from,to:to,ms:m});
+    from=addD(to,1);
+  });
+  return out;
+}
+function currentWindow(){
+  var t=todayISO(), ws=msWindows();
+  for(var i=0;i<ws.length;i++) if(t<=ws[i].to) return ws[i];
+  return ws.length?{id:null,name:"最終MS以降",from:addD(ws[ws.length-1].to,1),to:S.config.examDate,ms:null}:null;
+}
+function windowById(id){
+  return msWindows().filter(function(w){return w.id===id})[0]||null;
+}
+/* 周回カウント：scope="ms"（現MS窓）/"total"（起算日以降）/"all"（全記録） */
+function lapCount(sid,tid,scope,win){
+  var recs = scope==="all" ? S.records : scoped();
+  var segs = lapSegments(recs,sid,tid).filter(function(s){return s.done});
+  if(scope==="ms"){
+    var w = win||currentWindow(); if(!w)return 0;
+    segs = segs.filter(function(s){return s.last>=w.from&&s.last<=w.to});
+  }
+  return segs.length;
+}
+function progress(mat,recs,win){
   var segs=lapSegments(recs,mat.subjectId,mat.typeId);
-  var doneSegs=segs.filter(function(s){return s.done});
+  var allDone=segs.filter(function(s){return s.done});
+  var w=win||currentWindow();
+  /* 目標周回はMS単位。完了日が現MSの窓に入る周だけを数える */
+  var doneSegs=w?allDone.filter(function(s){return s.last>=w.from&&s.last<=w.to}):allDone;
   var maxC=doneSegs.length, cur=maxC+1, target=mat.targetLaps||0;
   var lap1=(mat.lap1Problems===""||mat.lap1Problems==null)?null:+mat.lap1Problems;
-  var predicted=doneSegs.length?doneSegs[doneSegs.length-1].problems:lap1;
+  var predicted=allDone.length?allDone[allDone.length-1].problems:lap1;
   if(!predicted&&lap1)predicted=lap1;
   var ready=!!(predicted&&predicted>0), remaining=0;
   if(ready&&target>maxC){
-    var inProg=segs.length>maxC?segs[segs.length-1].problems:0;
-    if(segs.length&&segs[segs.length-1].done)inProg=0;
+    var lastSeg=segs[segs.length-1];
+    var inProg=(lastSeg&&!lastSeg.done)?lastSeg.problems:0;
     remaining+=Math.max(0,predicted-inProg);
     var future=target-cur; if(future>0)remaining+=predicted*future;
   }
@@ -464,7 +555,7 @@ function prevMSEnd(){
   return p.length?effDL(p[p.length-1].date):S.config.startDate;
 }
 function totalRemaining(){
-  var st=S.config.startDate, recs=st?S.records.filter(function(r){return r.date>=st}):S.records;
+  var recs=scoped();
   var sum=0;
   S.materials.forEach(function(m){
     if(!isQuota(m))return;
@@ -740,14 +831,33 @@ function heatCard(){
 /* 「時間の器」＝今週の科目 × 曜日の教材種別（複数可） × 曜日の時間テンプレート
    mode="week" … 計画タブ：7日ぶんの設計図
    mode="today" … 今日タブ：当日1行＋MSノルマとの差分            */
-function typeChips(d,iso){
+/* その日その教材（今週の科目）で解いた問題数 */
+function solvedOn(iso,tid){
+  var cur=S.week.current; if(!cur)return 0;
+  var s=0;
+  S.records.forEach(function(r){
+    if(r.date===iso&&r.subjectId===cur&&r.typeId===tid)s+=r.problems||0});
+  return s;
+}
+function typeChips(d,iso,withActual){
   var ids=dayTypes(d);
   if(!ids.length)return '<span class="sm">—</span>';
   return ids.map(function(id){
-    var wq=weekQuotaFor(id);
-    return '<span class="tchip"><i class="dot" style="background:'+tColor(id)+'"></i>'+esc(tName(id))+
-      (wq&&wq.perDay!=null?'<b class="num">'+wq.perDay+'</b>':'')+'</span>';
+    var wq=weekQuotaFor(id), n=wq&&wq.perDay!=null?wq.perDay:null;
+    var body='';
+    if(withActual){
+      var got=solvedOn(iso,id);
+      if(n!=null)body='<b class="num'+(got>=n?" ok":"")+'">'+got+'/'+n+'</b>';
+      else if(got)body='<b class="num">'+got+'</b>';
+    }else if(n!=null){ body='<b class="num">'+n+'</b>'; }
+    return '<span class="tchip"><i class="dot" style="background:'+tColor(id)+'"></i>'+esc(tName(id))+body+'</span>';
   }).join("");
+}
+/* その日の実績合計（今週の科目・その日に置いた教材のみ） */
+function solvedTotalOn(iso){
+  var s=0,any=false;
+  dayTypes(dow(iso)).forEach(function(id){ s+=solvedOn(iso,id); any=true });
+  return any?s:null;
 }
 function vesselCard(mode){
   var ws=S.week.start||weekStart(todayISO()), t=todayISO();
@@ -796,12 +906,15 @@ function todayVessel(ws,t,cur){
   var tt=ttForDow(d), mn=ttMinutes(tt);
   var wq=weekQuotaOn(t), dq=dailyQuota();
   var html='<div class="card"><h2>今日の器'+(cur?'（'+esc(sName(cur))+'）':'')+'</h2>';
+  var got=solvedTotalOn(t)||0;
+  var doneAll=(wq!=null&&got>=wq);
   html+='<div class="row vrow"><span class="nm" style="font-weight:700">'+WD[d]+
     '<span class="sm" style="margin-left:6px">'+md(t)+'</span>'+
-    '<span class="tchips">'+typeChips(d,t)+'</span></span>'+
+    '<span class="tchips">'+typeChips(d,t,true)+'</span></span>'+
     '<span class="pill num">'+(mn?fmtHMs(mn):"—")+'</span>'+
-    '<span class="num" style="font-size:13px;min-width:44px;text-align:right;font-weight:'+(wq!=null?700:400)+
-      ';color:'+(wq!=null?"var(--ink)":"var(--faint)")+'">'+(wq!=null?wq+"問":"—")+'</span></div>';
+    '<span class="num" style="font-size:13px;min-width:56px;text-align:right;font-weight:700'+
+      ';color:'+(wq==null?"var(--faint)":(doneAll?"var(--good)":"var(--ink)"))+'">'+
+      (wq!=null?got+"/"+wq+"問":(got?got+"問":"—"))+'</span></div>';
   /* 差分 */
   var gapTxt="—",gapColor="var(--faint)",gapNote="";
   if(dq!=null&&wq!=null&&dq>0){
@@ -847,7 +960,7 @@ var statGran="week", statAxis="subject", palOpen=null;
 function go(t){tab=t;try{localStorage.setItem("ssm-v6-tab",t)}catch(e){}
   window.scrollTo(0,0);render()}
 function render(){
-  syncWeek(); applyTheme();
+  syncWeek(); snapshotMS(); applyTheme();
   var v=tab==="today"?vToday():tab==="plan"?vPlan():tab==="rec"?vRec():tab==="stat"?vStat():vSet();
   document.getElementById("app").innerHTML='<div class="wrap">'+v+'</div>';
   document.getElementById("tabbar").innerHTML=TABS.map(function(t){
@@ -1012,6 +1125,10 @@ function vPlan(){
       '<b style="font-size:14.5px">'+esc(m.name)+'</b><span class="sm num">'+md(effDL(m.date))+'</span>'+
       '<span class="pill" style="margin-left:auto;'+(empty?"color:var(--bad);border-color:var(--bad)":"")+'">'+
       (done?(empty?"総括が空欄":"総括あり"):"これから")+'</span></div>'+
+      (done&&m.targets&&m.targets.length?'<div class="tgt"><span class="tgtl">この期間の目標周回</span>'+
+        m.targets.map(function(g){
+          return '<div class="tgtrow"><b class="num">'+g.laps+'周</b><span>'+esc(g.items.join("、"))+'</span></div>'
+        }).join("")+'</div>':'')+
       '<label class="f"><span>この期間の計画</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="plan">'+esc(m.plan)+'</textarea></label>'+
       (done?'<label class="f"><span>振り返り</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="review">'+esc(m.review)+'</textarea></label>'+
       '<label class="f" style="margin-bottom:0"><span>次で気を付ける事</span><textarea class="inp" rows="2" data-ms="'+m.id+'" data-f="nextFocus">'+esc(m.nextFocus)+'</textarea></label>':'')+
@@ -1161,6 +1278,34 @@ function vStat(){
     legend(ag)+
     '<div class="hint">上の粒度・軸の切替と連動します。</div></div>';
 
+  /* 周回の累計 */
+  var w=currentWindow();
+  html+='<div class="card"><h2>周回'+(w?'（'+esc(w.name)+'：'+md(w.from)+'–'+md(w.to)+'）':'')+'</h2>';
+  var anyLap=false;
+  S.materials.forEach(function(m){
+    if(matHidden(m))return;
+    var msN=lapCount(m.subjectId,m.typeId,"ms",w);
+    var totN=lapCount(m.subjectId,m.typeId,"total");
+    var allN=lapCount(m.subjectId,m.typeId,"all");
+    if(!msN&&!totN&&!allN)return;
+    anyLap=true;
+    var tg=+m.targetLaps||0;
+    html+='<div class="row"><span class="dot" style="background:'+tColor(m.typeId)+'"></span>'+
+      '<span class="nm">'+esc(sName(m.subjectId))+' <span class="sm">'+esc(tName(m.typeId))+'</span></span>'+
+      '<span class="num" style="font-size:13px;min-width:44px;text-align:right;font-weight:700;color:'+
+        (tg&&msN>=tg?"var(--good)":"var(--ink)")+'">'+msN+(tg?"/"+tg:"")+'</span>'+
+      '<span class="num sm" style="min-width:34px;text-align:right">'+totN+'</span>'+
+      '<span class="num sm" style="min-width:34px;text-align:right">'+allN+'</span></div>';
+  });
+  if(!anyLap)html+='<div class="empty">完了した周がまだありません。</div>';
+  else html+='<div class="row" style="border-top:1px solid var(--line);padding-top:8px">'+
+    '<span class="nm sm" style="color:var(--sub)">左から</span>'+
+    '<span class="sm" style="min-width:44px;text-align:right">今MS</span>'+
+    '<span class="sm" style="min-width:34px;text-align:right">起算後</span>'+
+    '<span class="sm" style="min-width:34px;text-align:right">通算</span></div>';
+  html+='<div class="hint">目標周回はMS単位です。「今MS」だけが目標と残問題数の計算に使われます。'+
+    '「起算後」は起算日以降の累計、「通算」は前年度を含む全記録。周がMSをまたいだ場合は、完了日が属するMSに数えます。</div></div>';
+
   /* 優先度 */
   html+='<div class="card"><h2>優先度（最終周回日）</h2>';
   var pr=priority();
@@ -1178,7 +1323,7 @@ function vStat(){
   html+='<div class="hint">上位3件が来週の候補。周期'+cyc+'日を超えたら赤で出ます。非表示・ノルマ対象外の教材はここに出ません。</div></div>';
 
   /* ノルマ表 */
-  var st=S.config.startDate,recs=st?S.records.filter(function(r){return r.date>=st}):S.records;
+  var recs=scoped();
   var nm=nextMS(),dl=nm?effDL(nm.date):null,dd=dl?quotaDays(t,dl):null;
   html+='<div class="card"><h2>残りと1日ノルマ'+(nm?'（'+esc(nm.name)+'までノルマ日'+dd+'日）':'')+'</h2>';
   var any=false;
@@ -1325,7 +1470,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.10</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.20</div>';
   return html;
 }
 
