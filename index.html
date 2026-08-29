@@ -126,6 +126,9 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
   padding:4px 9px;min-width:52px;flex:none;line-height:1.15}
 .qcard .ql{font-size:9.5px;color:var(--faint);letter-spacing:.04em}
 .qcard .qv{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.tstack{display:inline-flex;flex-direction:column;align-items:center;gap:3px;flex:none}
+.tdone{font-size:10.5px;color:var(--faint)}
+.tdone.ok{color:var(--good);font-weight:700}
 .vrow .nm{white-space:normal;overflow:visible}
 .tpick{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);
   border:1px solid var(--line);border-radius:9px;padding:6px 10px;background:var(--card)}
@@ -170,7 +173,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.32
+   しゃろべん記録 v6.33
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -180,7 +183,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
    依存ライブラリなし・完全オフライン・単一HTML
    ===================================================================== */
 var KEY="ssm-v5-state";          /* 既存データを引き継ぐため v5 のキーのまま */
-var VER=8;
+var VER=9;
 
 /* ---------- utils ---------- */
 var uid=function(){return Math.random().toString(36).slice(2,10)};
@@ -249,9 +252,10 @@ function applyTheme(){
 
 /* ---------- state ---------- */
 var SEED={config:{startDate:todayISO(),examDate:"2027-08-22",spareDays:7,targetHours:1000,
-    cyclePeriod:70,gapWarnPct:30,theme:"kinari",gradient:false},
+    cyclePeriod:70,gapWarnPct:30,secWarn:60,theme:"kinari",gradient:false},
   subjects:[],types:[],materials:[],records:[],milestones:[],results:[],
-  timeTemplates:[],weekPlan:{},weekTemplate:{},week:{start:"",current:"",next:"",memo:""}};
+  timeTemplates:[],weekPlan:{},weekTemplate:{},week:{start:"",current:[],next:[],memo:""},
+  lastRec:{subjectId:"",typeId:""}};
 var S=null;
 
 function defaults(){return JSON.parse(JSON.stringify(SEED))}
@@ -265,6 +269,7 @@ function migrate(o){
   d.config=Object.assign(d.config,o.config||{});
   if(d.config.cyclePeriod==null)d.config.cyclePeriod=70;
   if(d.config.gapWarnPct==null)d.config.gapWarnPct=30;
+  if(d.config.secWarn==null)d.config.secWarn=60;
   if(!THEMES[d.config.theme])d.config.theme="kinari";
   d.config.gradient=!!d.config.gradient;
   d.results=JSON.parse(JSON.stringify(o.results||[]));
@@ -355,9 +360,13 @@ function migrate(o){
     }).filter(Boolean);
     if(arr.length)d.weekPlan[k]=arr;
   });
-  d.week=JSON.parse(JSON.stringify(o.week||{start:"",current:"",next:"",memo:""}));
-  if(d.week.current&&byCode[d.week.current])d.week.current=byCode[d.week.current];
-  if(d.week.next&&byCode[d.week.next])d.week.next=byCode[d.week.next];
+  d.week=JSON.parse(JSON.stringify(o.week||{start:"",current:[],next:[],memo:""}));
+  /* v8以前は文字列1件。配列へ寄せたうえで、旧コード参照をid参照に直す */
+  ["current","next"].forEach(function(k){
+    var arr=Array.isArray(d.week[k])?d.week[k]:(d.week[k]?[d.week[k]]:[]);
+    d.week[k]=arr.map(function(x){return byCode[x]||x}).filter(Boolean);
+  });
+  d.lastRec=Object.assign({subjectId:"",typeId:""},o.lastRec||{});
   return d;
 }
 function isV6(o){return o&&o.version>=8&&Array.isArray(o.subjects)&&o.subjects.length&&o.subjects[0].id}
@@ -370,6 +379,7 @@ function adopt(o){
     d.config=Object.assign(d.config,cp(o.config,{}));
     d.weekPlan=cp(o.weekPlan,{}); d.weekTemplate=cp(o.weekTemplate,{});
     d.week=cp(o.week,d.week);
+    d.lastRec=Object.assign({subjectId:"",typeId:""},cp(o.lastRec,{}));
     if(!THEMES[d.config.theme])d.config.theme="kinari";
     return d;
   }
@@ -389,6 +399,7 @@ function fill(){
   if(c.targetHours==null)c.targetHours=1000;
   if(c.cyclePeriod==null)c.cyclePeriod=70;
   if(c.gapWarnPct==null)c.gapWarnPct=30;
+  if(c.secWarn==null)c.secWarn=60;
   if(!THEMES[c.theme])c.theme="kinari";
   if(!c.startDate)c.startDate=todayISO();
   if(!S.timeTemplates.length)S.timeTemplates=[{id:"tt"+uid(),name:"仕事の日",blocks:[]}];
@@ -400,7 +411,13 @@ function fill(){
     S.weekPlan[k]=S.weekPlan[k].filter(function(id){return !!typ(id)});
     if(!S.weekPlan[k].length)delete S.weekPlan[k];
   });
-  if(!S.week)S.week={start:"",current:"",next:"",memo:""};
+  if(!S.week)S.week={start:"",current:[],next:[],memo:""};
+  /* 文字列で入っていた旧データを配列に寄せ、消えた科目を落とす */
+  ["current","next"].forEach(function(k){
+    var v=S.week[k];
+    S.week[k]=(Array.isArray(v)?v:(v?[v]:[])).filter(function(id){return !!subj(id)});
+  });
+  if(!S.lastRec)S.lastRec={subjectId:"",typeId:""};
   syncWeek();
 }
 function weekStart(iso){var d=dow(iso);return addD(iso,-((d-2+7)%7))}
@@ -448,7 +465,11 @@ function snapshotMS(){
 function syncWeek(){
   var ws=weekStart(todayISO());
   if(S.week.start!==ws){
-    if(S.week.start){ S.week.current=S.week.next||S.week.current; S.week.next=""; S.week.memo=""; }
+    if(S.week.start){
+      var nx=Array.isArray(S.week.next)?S.week.next:[];
+      if(nx.length)S.week.current=nx;      /* 来週を選んでいなければ今週を据え置く */
+      S.week.next=[]; S.week.memo="";
+    }
     S.week.start=ws; save();
   }
 }
@@ -462,6 +483,11 @@ function sColor(id){var s=subj(id);return s?s.color:"#8A8A8E"}
 function tColor(id){var t=typ(id);return t?t.color:"#8A8A8E"}
 function tHidden(id){var t=typ(id);return t?!!t.hidden:false}
 function matHidden(m){return !!m.hidden||tHidden(m.typeId)}
+/* 今週／来週の科目は配列。空配列と未設定を同じに扱うための入口 */
+function asArr(v){return Array.isArray(v)?v.slice():(v?[v]:[])}
+function curSubjects(){return asArr(S.week.current).filter(function(id){return !!subj(id)})}
+function nextSubjects(){return asArr(S.week.next).filter(function(id){return !!subj(id)})}
+function subjNames(ids){return ids.map(sName).join("・")}
 function isQuota(m){
   if(matHidden(m))return false;
   if(m.quota===true||m.quota===false)return m.quota;
@@ -622,7 +648,7 @@ function daysLeftForType(ti){
   return n;
 }
 function weekQuota(){
-  var cur=S.week.current, cnt=weekTypeDays(), out=[];
+  var cur=curSubjects(), cnt=weekTypeDays(), out=[];
   Object.keys(cnt).forEach(function(ti){
     var t=typ(ti); if(!t)return;
     var row={typeId:ti,name:t.name,color:t.color,days:cnt[ti],lap:null,
@@ -632,20 +658,28 @@ function weekQuota(){
              perDayRest:null,   /* 残り割：残り ÷ 残り日数 */
              lapDone:false,     /* 今週この教材の周が完了済み */
              quota:!!(t.quota&&!t.hidden)};
-    if(cur&&row.quota){
-      var m=S.materials.filter(function(x){return x.subjectId===cur&&x.typeId===ti&&!matHidden(x)})[0];
-      if(m){
-        var p=progress(m,scoped());
-        if(p.predicted&&p.predicted>0){
-          row.lap=p.predicted;
-          row.perDay=Math.ceil(p.predicted/row.days);
-          /* 目標周回に到達していれば、その週はもう解く必要がない */
-          if(p.target&&p.maxCompleted>=p.target){ row.lapDone=true; row.rest=0; row.perDayRest=0; }
-          else{
-            var op=openSeg(cur,ti);
-            row.rest=Math.max(0,p.predicted-(op?op.problems:0));
-            row.perDayRest=row.leftDays?Math.ceil(row.rest/row.leftDays):row.rest;
-          }
+    if(cur.length&&row.quota){
+      /* 科目ごとに「1周ぶん」と「その科目の進行中の周」を突き合わせてから足す。
+         合算してから1科目ぶんだけ引くと、先に完走した科目のぶん残りが目減りする */
+      var recs=scoped(), lapSum=0, restSum=0, any=false, allDone=true;
+      cur.forEach(function(sid){
+        var m=S.materials.filter(function(x){return x.subjectId===sid&&x.typeId===ti&&!matHidden(x)})[0];
+        if(!m)return;
+        var p=progress(m,recs);
+        if(!(p.predicted&&p.predicted>0))return;
+        any=true; lapSum+=p.predicted;
+        if(p.target&&p.maxCompleted>=p.target)return;   /* この科目は完了。残りに積まない */
+        allDone=false;
+        var op=openSeg(sid,ti);
+        restSum+=Math.max(0,p.predicted-(op?op.problems:0));
+      });
+      if(any){
+        row.lap=lapSum;
+        row.perDay=Math.ceil(lapSum/row.days);
+        if(allDone){ row.lapDone=true; row.rest=0; row.perDayRest=0; }
+        else{
+          row.rest=restSum;
+          row.perDayRest=row.leftDays?Math.ceil(restSum/row.leftDays):restSum;
         }
       }
     }
@@ -671,6 +705,13 @@ function weekRestOn(iso){
   return any?sum:null;
 }
 function gapWarnPct(){return Math.max(0,+S.config.gapWarnPct||0)}
+function secWarn(){return Math.max(0,+S.config.secWarn||0)}
+/* 1問の持ち時間タイル。閾値を割ったら赤。判断はしない、知らせるだけ */
+function paceTile(sec,label){
+  var w=secWarn(), thin=(sec!=null&&w>0&&sec<w);
+  return '<div class="tile"><div class="v num" style="color:'+(thin?"var(--bad)":"var(--ink)")+'">'+
+    esc(sec==null?"—":sec)+'<span class="u">秒</span></div><div class="k">'+esc(label)+'</div></div>';
+}
 
 /* ---------- priority ---------- */
 function priority(){
@@ -872,10 +913,10 @@ function heatCard(){
    mode="today" … 今日タブ：当日1行＋MSノルマとの差分            */
 /* その日その教材（今週の科目）で解いた問題数 */
 function solvedOn(iso,tid){
-  var cur=S.week.current; if(!cur)return 0;
+  var cur=curSubjects(); if(!cur.length)return 0;
   var s=0;
   S.records.forEach(function(r){
-    if(r.date===iso&&r.subjectId===cur&&r.typeId===tid)s+=r.problems||0});
+    if(r.date===iso&&cur.indexOf(r.subjectId)>=0&&r.typeId===tid)s+=r.problems||0});
   return s;
 }
 function typeChips(d,iso,withActual){
@@ -908,10 +949,10 @@ function solvedTotalOn(iso){
 }
 function vesselCard(mode){
   var ws=S.week.start||weekStart(todayISO()), t=todayISO();
-  var cur=S.week.current;
+  var cur=curSubjects();
   if(mode==="today")return todayVessel(ws,t,cur);
 
-  var html='<div class="card"><h2>今週の時間の器'+(cur?'（'+esc(sName(cur))+'）':'')+'</h2>';
+  var html='<div class="card"><h2>今週の時間の器'+(cur.length?'（'+esc(subjNames(cur))+'）':'')+'</h2>';
   var totMin=0,totQ=0,anyQ=false;
   WEEK_ORDER.forEach(function(d,i){
     var iso=addD(ws,i), tt=ttForDow(d), mn=ttMinutes(tt);
@@ -929,10 +970,10 @@ function vesselCard(mode){
   html+='<div class="tiles" style="margin-top:14px">'+
     tile(totMin?fmtHM(totMin):"—","","今週の確保時間")+
     tile(anyQ?totQ:"—","問","今週のノルマ")+
-    tile(anyQ&&totQ&&totMin?Math.round(totMin*60/totQ):"—","秒","1問の持ち時間")+'</div>';
+    paceTile(anyQ&&totQ&&totMin?Math.round(totMin*60/totQ):null,"1問の持ち時間")+'</div>';
   /* 教材別の内訳 */
   var wq=weekQuota().filter(function(r){return r.quota});
-  if(cur&&wq.length){
+  if(cur.length&&wq.length){
     html+='<div style="margin-top:6px">';
     wq.forEach(function(r){
       html+='<div class="row"><span class="dot" style="background:'+r.color+'"></span>'+
@@ -947,16 +988,18 @@ function vesselCard(mode){
     });
     html+='</div>';
   }
-  html+='<div class="hint">1科目1週間。<b>設計</b>＝1周ぶん ÷ その教材に割り当てた日数（固定・週の設計図）。'+
+  html+='<div class="hint">科目は複数選べます。数字は選んだ科目の合計です。'+
+    '<b>設計</b>＝1周ぶん ÷ その教材に割り当てた日数（固定・週の設計図）。'+
     '<b>残</b>＝今の周の残り ÷ 今週の残り該当日数（実績で動く・今日の指示）。'+
-    '目標周回に届いた教材は「完了」になり、その週はもう0問です。曜日には教材を複数置けます。</div></div>';
+    '選んだ科目すべてが目標周回に届いた教材は「完了」になり、その週はもう0問です。曜日には教材を複数置けます。</div></div>';
   return html;
 }
 function todayVessel(ws,t,cur){
   var d=dow(t), i=WEEK_ORDER.indexOf(d);
   var tt=ttForDow(d), mn=ttMinutes(tt);
   var wq=weekQuotaOn(t), dq=dailyQuota();
-  var html='<div class="card"><h2>今日の器'+(cur?'（'+esc(sName(cur))+'）':'')+'</h2>';
+  cur=cur||curSubjects();
+  var html='<div class="card"><h2>今日の器'+(cur.length?'（'+esc(subjNames(cur))+'）':'')+'</h2>';
   var rest=weekRestOn(t);
   var got=solvedTotalOn(t)||0;
   var doneAll=(rest===0);
@@ -966,7 +1009,9 @@ function todayVessel(ws,t,cur){
     '<span class="qcard"><span class="ql">ノルマ</span>'+
       '<span class="qv num" style="color:'+(rest===0?"var(--good)":"var(--ink)")+'">'+
       (rest==null?"—":rest)+'</span></span>'+
-    '<span class="pill num">'+(mn?fmtHMs(mn):"—")+'</span>'+
+    '<span class="tstack"><span class="pill num">'+(mn?fmtHMs(mn):"—")+'</span>'+
+      '<span class="tdone num'+(mn&&minutesOn(t)>=mn?" ok":"")+'">済 '+
+      (minutesOn(t)?fmtHMs(minutesOn(t)):"0m")+'</span></span>'+
     '<span class="num" style="font-size:13px;min-width:46px;text-align:right;font-weight:700'+
       ';color:'+(doneAll?"var(--good)":"var(--ink)")+'">'+got+'<span class="u">問</span></span></div>';
   /* 差分 */
@@ -991,7 +1036,7 @@ function todayVessel(ws,t,cur){
 
   html+='<div class="tiles two">'+
     tile(mn?fmtHM(mn):"—","","今日の確保時間")+
-    tile(wq&&mn?Math.round(mn*60/wq):"—","秒","1問の持ち時間")+'</div>';
+    paceTile(wq&&mn?Math.round(mn*60/wq):null,"1問の持ち時間")+'</div>';
   html+='<div class="hint">'+esc(gapNote)+'<br>'+
     '<b>設計</b>＝1周ぶん ÷ 週内の該当日数（固定）。週の組み方が期限に合っているかを、MSの配分と比べるための数字です。<br>'+
     'チップの<b>太字</b>＝今日のノルマ（今の周の残り ÷ 今週の残り該当日数）。記録を入れると減ります。<b>済</b>＝今日解いた数。'+
@@ -1030,7 +1075,7 @@ function vToday(){
   var dq=dailyQuota(), pt=problemsOn(t), mt=minutesOn(t);
   var pct=dq?Math.min(100,Math.round(pt/dq*100)):0;
   var todayTypes=dayTypes(dow(t));
-  var cur=S.week.current, pri=prioritySubjects();
+  var cur=curSubjects(), pri=prioritySubjects();
   var cyc=cyclePeriod();
   var late=pri.filter(function(x){return x.last==null||x.ago>=cyc}).length;
   var nm=nextMS(), left=msLeftDays();
@@ -1058,9 +1103,9 @@ function vToday(){
   html+=vesselCard("today");
 
   html+='<div class="dark">';
-  if(cur){
+  if(cur.length){
     var tnames=todayTypes.map(function(id){return tName(id)}).join("＋");
-    html+='<div class="lab">今週やること</div><div class="big">'+esc(sName(cur))+
+    html+='<div class="lab">今週やること</div><div class="big">'+esc(subjNames(cur))+
       (tnames?'　'+esc(tnames):'')+'</div>'+
       '<div class="meta">'+WD[dow(t)]+'曜は「'+esc(tnames||"—")+'」の日'+
       (dayIsQuota(t)?'':'・ノルマ母数から外れる日')+'</div>';
@@ -1069,7 +1114,7 @@ function vToday(){
       '<div class="big">今週の科目を<br>選びましょう</div>'+
       '<div class="meta">最終周回日が古い科目から候補を出します</div>';
   }
-  html+='<button class="btn" data-sheet="'+(cur?"rec":"pick")+'">'+(cur?"記録する":"科目を選ぶ")+'</button></div>';
+  html+='<button class="btn" data-sheet="'+(cur.length?"rec":"pickcur")+'">'+(cur.length?"記録する":"科目を選ぶ")+'</button></div>';
 
   html+='<div class="tiles">'+
     tile(pri[0]?pri[0].name:"—","","最優先の科目")+
@@ -1084,7 +1129,7 @@ function vToday(){
       '<span class="sm num" style="color:'+(over?"var(--bad)":"var(--faint)")+
       ';font-weight:'+(over?700:400)+'">'+(r.last==null?"未着手":r.ago+"日前")+'</span></div>'}).join("");
   html+='<div class="hint">周期'+cyc+'日を超えた科目を赤で出しています（設定タブで変更できます）。'+
-    (cur?'<br>今週は「'+esc(sName(cur))+'」。来週の候補は計画タブで選べます。':'')+'</div></div>';
+    (cur.length?'<br>今週は「'+esc(subjNames(cur))+'」。来週の候補は計画タブで選べます。':'')+'</div></div>';
   return html;
 }
 
@@ -1109,9 +1154,9 @@ function vPlan(){
   var pri=prioritySubjects().slice(0,3);
   html+='<div class="card"><h2>今週（'+md(ws)+' – '+md(we)+'）</h2>';
   html+='<div class="row"><span class="nm">今週の科目</span>'+
-    '<button class="pill b" data-sheet="pickcur">'+(S.week.current?esc(sName(S.week.current)):"選ぶ")+'</button></div>';
+    '<button class="pill b" data-sheet="pickcur">'+(curSubjects().length?esc(subjNames(curSubjects())):"選ぶ")+'</button></div>';
   html+='<div class="row"><span class="nm">来週の候補</span>'+
-    '<button class="pill b" data-sheet="pick">'+(S.week.next?esc(sName(S.week.next)):"選ぶ")+'</button></div>';
+    '<button class="pill b" data-sheet="pick">'+(nextSubjects().length?esc(subjNames(nextSubjects())):"選ぶ")+'</button></div>';
   html+='<label class="f" style="margin-top:12px"><span>メモ（週が変わると消えます）</span>'+
     '<textarea class="inp" rows="3" data-week="memo" placeholder="例：健保は保険給付から。徴収は労一の合間に。">'+esc(S.week.memo)+'</textarea></label>';
   html+='<div class="hint">最終周回日が古い順の候補：'+pri.map(function(p){
@@ -1200,8 +1245,12 @@ function vRec(){
   var visT=S.types.filter(function(t){return !t.hidden});
   var visS=S.subjects.filter(function(s){return !s.hidden});
   if(!F.date)F.date=todayISO();
-  if(!F.subjectId||!subj(F.subjectId))F.subjectId=(visS[0]||{}).id||"";
-  if(!F.typeId||!typ(F.typeId))F.typeId=(visT[0]||{}).id||"";
+  /* 初期値は「最後に保存したときの科目・教材」。ほとんどが前回の続きなので */
+  var lr=S.lastRec||{};
+  if(!F.subjectId||!subj(F.subjectId))
+    F.subjectId=(subj(lr.subjectId)&&!subj(lr.subjectId).hidden?lr.subjectId:"")||(visS[0]||{}).id||"";
+  if(!F.typeId||!typ(F.typeId))
+    F.typeId=(typ(lr.typeId)&&!typ(lr.typeId).hidden?lr.typeId:"")||(visT[0]||{}).id||"";
   if(!F.times||!F.times.length)F.times=[""];
   var op=openSeg(F.subjectId,F.typeId);
   var lapNo=lapSegments(S.records,F.subjectId,F.typeId).length+(op?0:1);
@@ -1232,7 +1281,7 @@ function vRec(){
     '<div style="margin-bottom:12px">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'+
         '<span style="font-size:12px;color:var(--sub)">学習時間 HHMM</span>'+
-        '<span class="num" style="font-size:12.5px;color:'+(tsum?"var(--ink)":"var(--faint)")+';font-weight:600">合計 '+(tsum?fmtHM(tsum):"—")+'</span></div>'+
+        '<span class="num" id="tmSum" style="font-size:12.5px;color:'+(tsum?"var(--ink)":"var(--faint)")+';font-weight:600">合計 '+(tsum?fmtHM(tsum):"—")+'</span></div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:7px">'+
       F.times.map(function(t,i){
         return '<div style="display:flex;align-items:center;gap:4px">'+
@@ -1432,9 +1481,12 @@ function vSet(){
     '<label class="f"><span>予備日</span><input class="inp num" inputmode="numeric" data-cfg="spareDays" value="'+esc(S.config.spareDays)+'"></label>'+
     '<label class="f"><span>目標時間</span><input class="inp num" inputmode="numeric" data-cfg="targetHours" value="'+esc(S.config.targetHours)+'"></label>'+
     '<label class="f"><span>周期（日）</span><input class="inp num" inputmode="numeric" data-cfg="cyclePeriod" value="'+esc(S.config.cyclePeriod)+'"></label>'+
-    '<label class="f" style="margin-bottom:0"><span>差分の警告（％）</span><input class="inp num" inputmode="numeric" data-cfg="gapWarnPct" value="'+esc(S.config.gapWarnPct)+'"></label>'+
+    '<label class="f"><span>差分の警告（％）</span><input class="inp num" inputmode="numeric" data-cfg="gapWarnPct" value="'+esc(S.config.gapWarnPct)+'"></label>'+
+    '<label class="f" style="margin-bottom:0"><span>持ち時間の警告（秒）</span><input class="inp num" inputmode="numeric" data-cfg="secWarn" value="'+esc(S.config.secWarn)+'"></label>'+
     '</div><div class="hint">締切は「マイルストーン設定日 − 予備日」。周期は「最終周回から何日空いたら赤くするか」の閾値。'+
-    '差分の警告は、今日タブで「MSのノルマ」と「週のノルマ」が何％ズレたら赤くするかです。</div></div>';
+    '差分の警告は、今日タブで「MSのノルマ」と「週のノルマ」が何％ズレたら赤くするかです。'+
+    '<br>持ち時間の警告は、1問あたりの秒数がこれを下回ったら赤くします。科目を束ねた週に詰め込みすぎていないかの検知用で、'+
+    '配分は変えません。赤くなったら曜日の教材を手で散らしてください。0で無効。</div></div>';
 
   /* テーマ */
   html+='<div class="card"><h2>テーマ</h2>';
@@ -1526,7 +1578,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.32</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.33</div>';
   return html;
 }
 
@@ -1537,15 +1589,19 @@ function showSheet(kind){
   sheet=kind;
   var h='', isCur=kind==="pickcur";
   var cand=prioritySubjects();
+  var picked=isCur?curSubjects():nextSubjects();
   h='<h3>'+(isCur?"今週":"来週")+'の科目</h3>'+
-    '<div class="hint" style="margin:0 0 12px">最終周回日が古い順です。提案どおりでなくて構いません。</div>';
+    '<div class="hint" style="margin:0 0 12px">最終周回日が古い順です。複数選べます（もう一度押すと外れます）。'+
+    '提案どおりでなくて構いません。</div>';
   cand.forEach(function(c,i){
-    var sel=(isCur?S.week.current:S.week.next)===c.id;
+    var sel=picked.indexOf(c.id)>=0;
     h+='<button class="choice'+(sel?" on":"")+'" data-pick="'+esc(c.id)+'" data-cur="'+(isCur?1:0)+'">'+
       '<span class="s">'+(c.last==null?"未着手":c.ago+"日前")+'</span>'+esc(c.name)+
       (i<3?' <span class="pill b" style="margin-left:6px">候補</span>':'')+'</button>';
   });
-  h+='<button class="ghost" style="width:100%;margin-top:10px" data-close="1">閉じる</button>';
+  h+='<div class="hint" style="margin:12px 0 0">選択中：'+
+    (picked.length?esc(subjNames(picked)):"—")+'</div>'+
+    '<button class="ghost" style="width:100%;margin-top:10px" data-close="1">閉じる</button>';
   document.body.insertAdjacentHTML("beforeend",
     '<div class="sheetbg" id="sheetbg"><div class="sheet">'+h+'</div></div>');
 }
@@ -1568,8 +1624,13 @@ document.addEventListener("click",function(ev){
   if(d.go){go(d.go);return}
   if(d.sheet){showSheet(d.sheet);return}
   if(d.close!==undefined){closeSheet();return}
-  if(d.pick){ if(d.cur==="1")S.week.current=d.pick; else S.week.next=d.pick;
-    save();closeSheet();render();return}
+  if(d.pick){
+    var isCur=(d.cur==="1"), key=isCur?"current":"next";
+    var arr=asArr(S.week[key]), at=arr.indexOf(d.pick);
+    if(at>=0)arr.splice(at,1); else arr.push(d.pick);
+    S.week[key]=arr; save(); render();
+    closeSheet(); showSheet(isCur?"pickcur":"pick");   /* 続けて選べるよう開き直す */
+    return}
 
   if(d.wptoggle!==undefined){
     var k=d.wptoggle, arr=(S.weekPlan[k]||[]).slice(), j=arr.indexOf(d.tid);
@@ -1657,7 +1718,16 @@ document.addEventListener("change",function(ev){
     if(tt)tt.blocks[+d.blk][d.f]=el.value.replace(/[^0-9]/g,"");save();render();return}
   if(d.mat!==undefined&&(d.f==="subjectId"||d.f==="typeId")){
     var mv=S.materials[+d.mat]; mv[d.f]=el.value; save();render();return}
-  if(d.tm!==undefined){F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");render();return}
+  if(d.tm!==undefined){
+    F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");
+    el.value=F.times[+d.tm];
+    var b2=document.getElementById("tmSum");
+    if(b2){
+      var s2=F.times.reduce(function(a,x){return a+parseHHMM(x)},0);
+      b2.textContent="合計 "+(s2?fmtHM(s2):"—");
+      b2.style.color=s2?"var(--ink)":"var(--faint)";
+    }
+    return}
   if(d.f&&["date","subjectId","typeId","problems","memo"].indexOf(d.f)>=0&&!d.mat&&!d.sub&&!d.ty&&!d.msx){
     F[d.f]=el.value; if(d.f!=="problems"&&d.f!=="memo"){F.loaded="";render()} return}
 });
@@ -1668,13 +1738,21 @@ document.addEventListener("input",function(ev){
   if(d.ms){var m=S.milestones.filter(function(x){return x.id===d.ms})[0];if(m){m[d.f]=el.value;save()}return}
   if(d.msx){var m2=S.milestones.filter(function(x){return x.id===d.msx})[0];if(m2){m2[d.f]=el.value;save()}return}
   if(d.cfg){var v=el.value;
-    if(["spareDays","targetHours","cyclePeriod","gapWarnPct"].indexOf(d.cfg)>=0)v=+String(v).replace(/[^0-9]/g,"")||0;
+    if(["spareDays","targetHours","cyclePeriod","gapWarnPct","secWarn"].indexOf(d.cfg)>=0)v=+String(v).replace(/[^0-9]/g,"")||0;
     S.config[d.cfg]=v;save();return}
   if(d.ty!==undefined&&d.f){var t2=typ(d.ty);if(t2)t2[d.f]=el.value;save();return}
   if(d.sub!==undefined&&d.f){var s2=subj(d.sub);if(s2)s2[d.f]=el.value;save();return}
   if(d.mat!==undefined&&d.f){var mm=S.materials[+d.mat];
     mm[d.f]=(d.f==="targetLaps")?(+el.value.replace(/[^0-9]/g,"")||0):el.value.replace(/[^0-9]/g,"");save();return}
-  if(d.tm!==undefined){F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");return}
+  if(d.tm!==undefined){
+    F.times[+d.tm]=el.value.replace(/[^0-9]/g,"");
+    var box=document.getElementById("tmSum");
+    if(box){
+      var sum=F.times.reduce(function(a,x){return a+parseHHMM(x)},0);
+      box.textContent="合計 "+(sum?fmtHM(sum):"—");
+      box.style.color=sum?"var(--ink)":"var(--faint)";
+    }
+    return}
   if(d.f&&["problems","memo"].indexOf(d.f)>=0&&d.blk===undefined){F[d.f]=el.value;return}
 });
 
@@ -1692,6 +1770,8 @@ function submit(){
     S.records.unshift({id:uid(),date:F.date,subjectId:F.subjectId,typeId:F.typeId,
       lap:op?lap:lap+1,problems:p,wrong:0,minutes:mi,done:!!F.done,memo:(F.memo||"").trim(),lapTotal:null});
   }
+  /* セレクトを回しただけでは動かさない。保存が通った瞬間だけ覚える */
+  S.lastRec={subjectId:F.subjectId,typeId:F.typeId};
   F.loaded=""; save(); render();
 }
 function doExport(){
