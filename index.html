@@ -1103,7 +1103,9 @@ var TABS=[
   ["set","設定",'<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/>']
 ];
 var tab=(function(){try{return localStorage.getItem("ssm-v6-tab")||"today"}catch(e){return "today"}})();
-var planKind=null, recOpenY=null, recOpenM=null, recOpenD=null;
+var planKind=null;
+/* 履歴は今日を開いた状態から。たたむ操作が入ればそちらが優先される */
+var recOpenY=todayISO().slice(0,4), recOpenM=todayISO().slice(0,7), recOpenD=todayISO();
 var statGran="week", statAxis="subject", palOpen=null;
 var planWeek="cur";   /* 計画タブで今どちらの週を編集しているか。保存しない */
 
@@ -1465,7 +1467,7 @@ function vStat(){
   /* 周回の累計 */
   var w=currentWindow();
   html+='<div class="card"><h2>周回'+(w?'（'+esc(w.name)+'：'+md(w.from)+'–'+md(w.to)+'）':'')+'</h2>';
-  var anyLap=false;
+  var lapRows='', anyLap=false;
   S.materials.forEach(function(m){
     if(matHidden(m))return;
     var msN=lapCount(m.subjectId,m.typeId,"ms",w);
@@ -1474,7 +1476,7 @@ function vStat(){
     if(!msN&&!totN&&!allN)return;
     anyLap=true;
     var tg=+m.targetLaps||0;
-    html+='<div class="row"><span class="dot" style="background:'+tColor(m.typeId)+'"></span>'+
+    lapRows+='<div class="row"><span class="dot" style="background:'+tColor(m.typeId)+'"></span>'+
       '<span class="nm">'+esc(sName(m.subjectId))+' <span class="sm">'+esc(tName(m.typeId))+'</span></span>'+
       '<span class="num" style="font-size:13px;min-width:44px;text-align:right;font-weight:700;color:'+
         (tg&&msN>=tg?"var(--good)":"var(--ink)")+'">'+msN+(tg?"/"+tg:"")+'</span>'+
@@ -1482,11 +1484,14 @@ function vStat(){
       '<span class="num sm" style="min-width:34px;text-align:right">'+allN+'</span></div>';
   });
   if(!anyLap)html+='<div class="empty">完了した周がまだありません。</div>';
-  else html+='<div class="row" style="border-top:1px solid var(--line);padding-top:8px">'+
-    '<span class="nm sm" style="color:var(--sub)">左から</span>'+
-    '<span class="sm" style="min-width:44px;text-align:right">今MS</span>'+
-    '<span class="sm" style="min-width:34px;text-align:right">起算後</span>'+
-    '<span class="sm" style="min-width:34px;text-align:right">通算</span></div>';
+  else{
+    /* 見出しは表の上。中身が無いときは見出しも出さない */
+    html+='<div class="row" style="border-bottom:1px solid var(--line);padding-bottom:8px">'+
+      '<span class="nm sm" style="color:var(--sub)">左から</span>'+
+      '<span class="sm" style="min-width:44px;text-align:right">今MS</span>'+
+      '<span class="sm" style="min-width:34px;text-align:right">起算後</span>'+
+      '<span class="sm" style="min-width:34px;text-align:right">通算</span></div>'+lapRows;
+  }
   html+='<div class="hint">目標周回はMS単位です。「今MS」だけが目標と残問題数の計算に使われます。'+
     '「起算後」は起算日以降の累計、「通算」は前年度を含む全記録。周がMSをまたいだ場合は、完了日が属するMSに数えます。</div></div>';
 
