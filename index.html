@@ -1125,7 +1125,10 @@ function render(){
 function vToday(){
   var t=todayISO(), c=S.config;
   var dq=dailyQuota(), pt=problemsOn(t), mt=minutesOn(t);
-  var pct=dq?Math.min(100,Math.round(pt/dq*100)):0;
+  /* 数字は実測値。リングは満タンで止める（負のdashoffsetは逆回りに描き足されて壊れる） */
+  var pct=dq?Math.round(pt/dq*100):0;
+  var ringPct=Math.min(100,pct);
+  var pctFS=pct>=1000?12:pct>=100?14.5:17;
   var todayTypes=dayTypes(dow(t));
   var cur=curSubjects(), pri=prioritySubjects();
   var cyc=cyclePeriod();
@@ -1146,9 +1149,10 @@ function vToday(){
     '<svg width="82" height="82" viewBox="0 0 82 82">'+
       '<circle cx="41" cy="41" r="'+R+'" fill="none" stroke="var(--track)" stroke-width="8"/>'+
       '<circle cx="41" cy="41" r="'+R+'" fill="none" stroke="'+(pct>=100?"var(--good)":"var(--ink)")+'" stroke-width="8"'+
-      ' stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-pct/100))+'"'+
+      ' stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-ringPct/100))+'"'+
       ' transform="rotate(-90 41 41)"/>'+
-      '<text x="41" y="46" text-anchor="middle" font-size="17" font-weight="800" fill="var(--ink)" class="num">'+pct+'</text>'+
+      '<text x="41" y="'+(46-(17-pctFS)*0.35).toFixed(1)+'" text-anchor="middle" font-size="'+pctFS+
+      '" font-weight="800" fill="var(--ink)" class="num">'+pct+'</text>'+
     '</svg><div><div class="t1">MS：今日のノルマ</div>'+
     '<div class="t2 num">'+pt+' / '+(dq==null?"—":dq)+' 問　・　'+fmtHM(mt)+'</div></div></div></div>';
 
