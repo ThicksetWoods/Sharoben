@@ -173,7 +173,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.34
+   しゃろべん記録 v6.35
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -183,7 +183,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
    依存ライブラリなし・完全オフライン・単一HTML
    ===================================================================== */
 var KEY="ssm-v5-state";          /* 既存データを引き継ぐため v5 のキーのまま */
-var VER=10;
+var VER=11;
 
 /* ---------- utils ---------- */
 var uid=function(){return Math.random().toString(36).slice(2,10)};
@@ -202,6 +202,27 @@ var fmtHMs=function(m){var h=Math.floor(m/60);return (h?h+"h":"")+(m%60)+"m"};
 var md=function(iso){return (+iso.slice(5,7))+"/"+(+iso.slice(8,10))};
 var WD=["日","月","火","水","木","金","土"];
 var WEEK_ORDER=[2,3,4,5,6,0,1];   /* 火はじまり */
+
+/* ---------- 結果（模試・本試験）の科目軸 ----------
+   科目マスタとは別建て。選択式8科目は本試験の出題順、択一式7科目は徴収を合算枠で持つ。
+   基準点は選択3点・択一4点で固定（救済は年ごとに動くので追わない）。 */
+var RESULT_SUBJECTS={
+  "選択":["労基・安衛","労災","雇用","労一","社一","健保","厚年","国年"],
+  "択一":["労基・安衛","労災・徴収","雇用・徴収","一般常識","健保","厚年","国年"]
+};
+var RESULT_MAX={"選択":5,"択一":10};
+var RESULT_MIN={"選択":3,"択一":4};
+/* v10以前の誤記。選択式と同じく労基＋安衛の1科目なので綴りを揃える */
+var RESULT_KEY_FIX={"労基・安全":"労基・安衛"};
+function fixResultKeys(list){
+  (list||[]).forEach(function(r){
+    var sc=r.scores||{}, out={};
+    Object.keys(sc).forEach(function(k){ out[RESULT_KEY_FIX[k]||k]=sc[k] });
+    r.scores=out;
+    if(!r.id)r.id=uid();
+  });
+  return list;
+}
 
 /* ---------- palettes ---------- */
 var PALETTE=["#D8483C","#E0663B","#C98A00","#7E9B2E","#2E9E6B","#0E9AA7","#3B6FE0","#6B5CE0",
@@ -272,7 +293,7 @@ function migrate(o){
   if(d.config.secWarn==null)d.config.secWarn=60;
   if(!THEMES[d.config.theme])d.config.theme="kinari";
   d.config.gradient=!!d.config.gradient;
-  d.results=JSON.parse(JSON.stringify(o.results||[]));
+  d.results=fixResultKeys(JSON.parse(JSON.stringify(o.results||[])));
   d.milestones=(o.milestones||[]).map(function(m){
     return {id:m.id||uid(),name:m.name,date:m.date,plan:m.plan||"",review:m.review||"",
             nextFocus:m.nextFocus||"",targets:m.targets||null}});
@@ -379,6 +400,7 @@ function adopt(o){
     ["subjects","types","materials","records","milestones","results","timeTemplates"].forEach(function(k){
       d[k]=cp(o[k],[])});
     d.config=Object.assign(d.config,cp(o.config,{}));
+    fixResultKeys(d.results);
     d.weekPlan=cp(o.weekPlan,{}); d.weekTemplate=cp(o.weekTemplate,{});
     d.weekPlanNext=o.weekPlanNext?cp(o.weekPlanNext,null):null;
     d.week=cp(o.week,d.week);
@@ -417,6 +439,8 @@ function fill(){
     S.week[k]=(Array.isArray(v)?v:(v?[v]:[])).filter(function(id){return !!subj(id)});
   });
   if(!S.lastRec)S.lastRec={subjectId:"",typeId:""};
+  if(!S.results)S.results=[];
+  fixResultKeys(S.results);
   syncWeek();
 }
 function normPlan(pl){
@@ -868,7 +892,7 @@ function barChart(ag){
          '" fill="'+(ag.axisSubject?sColor(id):tColor(id))+'" rx="1.5"><title>'+
          esc(b.label)+' '+esc(ag.axisSubject?sName(id):tName(id))+' '+fmtHMs(mn)+'</title></rect>';
     });
-    if(b.total)g+='<text x="'+(x+w/2)+'" y="'+(top+ph-acc-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" fill="var(--faint)">'+
+    if(b.total)g+='<text x="'+(x+w/2)+'" y="'+(top+ph-acc-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink)">'+
       (b.total>=60?Math.round(b.total/60*10)/10+"h":b.total+"m")+'</text>';
     var every=bs.length>16?Math.ceil(bs.length/12):1;
     if(i%every===0)g+='<text x="'+(x+w/2)+'" y="'+(H-12)+'" text-anchor="middle" font-size="9" fill="var(--faint)">'+esc(b.label)+'</text>';
@@ -1119,6 +1143,9 @@ function render(){
   document.getElementById("tabbar").innerHTML=TABS.map(function(t){
     return '<button data-go="'+t[0]+'" class="'+(tab===t[0]?"on":"")+'">'+
       '<svg viewBox="0 0 24 24">'+t[2]+'</svg>'+t[1]+'</button>'}).join("");
+  /* 推移は直近が見たいので右端から開く */
+  var ch=document.getElementById("statChart");
+  if(ch)ch.scrollLeft=ch.scrollWidth;
 }
 
 /* ---------- 今日 ---------- */
@@ -1314,6 +1341,8 @@ function vPlan(){
 
 /* ---------- 記録 ---------- */
 var F={date:"",subjectId:"",typeId:"",problems:"",times:[""],done:false,nolap:false,memo:"",loaded:""};
+/* 模試・本試験の入力欄。保存はしない（記録タブを離れると消える） */
+var R={exam:"",date:"",mode:"選択",scores:{}};
 function vRec(){
   var visT=S.types.filter(function(t){return !t.hidden});
   var visS=S.subjects.filter(function(s){return !s.hidden});
@@ -1432,6 +1461,26 @@ function vRec(){
     });
   });
   html+='<div class="hint">年をたたむと全部たたまれます。非表示にした教材の記録もここには残ります。</div></div>';
+
+  /* 模試・本試験の得点。日々の正答率とは別の棚 */
+  var subs=RESULT_SUBJECTS[R.mode]||[];
+  html+='<div class="card"><h2>模試・本試験の得点</h2>'+
+    '<label class="f"><span>試験名</span><input class="inp" data-rf="exam" value="'+esc(R.exam)+'" placeholder="第○回 模試 など"></label>'+
+    '<label class="f"><span>日付</span><input type="date" class="inp" data-rf="date" value="'+esc(R.date||todayISO())+'"></label>'+
+    '<div class="seg" style="margin-bottom:12px">'+
+      '<button data-rmode="選択" class="'+(R.mode==="選択"?"on":"")+'">選択式</button>'+
+      '<button data-rmode="択一" class="'+(R.mode==="択一"?"on":"")+'">択一式</button></div>'+
+    '<div style="font-size:12px;color:var(--sub);margin-bottom:6px">'+
+      esc(R.mode==="選択"?"選択式・8科目（各5点）":"択一式・7科目（各10点／徴収は合算枠）")+
+      '　入れた科目だけ記録します</div>'+
+    '<div class="g2">'+subs.map(function(sb){
+      return '<label class="f"><span>'+esc(sb)+'</span>'+
+        '<input class="inp num" style="text-align:center" inputmode="numeric" data-rs="'+esc(sb)+'" value="'+
+        esc(R.scores[sb]==null?"":R.scores[sb])+'" placeholder="—"></label>';
+    }).join("")+'</div>'+
+    '<button class="primary" data-raddall="1">この結果を記録する</button>'+
+    '<div class="hint">満点は選択式が各5点、択一式が各10点。'+
+      '統計タブでは選択式3点未満・択一式4点未満を赤で出します（救済は見ません）。</div></div>';
   return html;
 }
 
@@ -1459,7 +1508,7 @@ function vStat(){
     '<div class="seg sm" style="margin-bottom:12px">'+
       '<button data-axis="subject" class="'+(statAxis==="subject"?"on":"")+'">科目別</button>'+
       '<button data-axis="type" class="'+(statAxis==="type"?"on":"")+'">教材別</button></div>'+
-    '<div class="chartwrap">'+barChart(ag)+'</div>'+
+    '<div class="chartwrap" id="statChart">'+barChart(ag)+'</div>'+
     '<div class="hint">'+esc(ag.range.label)+'（'+md(ag.range.from)+'–'+md(ag.range.to)+'）。'+
     'ノルマ対象外の教材も含めた、実際に使った時間です。</div></div>';
 
@@ -1539,15 +1588,24 @@ function vStat(){
   if(S.results&&S.results.length){
     html+='<div class="card"><h2>模試・本試験</h2>';
     S.results.slice().sort(function(a,b){return a.date<b.date?1:-1}).forEach(function(r){
-      var ks=Object.keys(r.scores||{});
+      /* 並びは本試験の出題順。軸に無いキーは末尾に落とす */
+      var axis=RESULT_SUBJECTS[r.mode]||[], sc=r.scores||{};
+      var ks=axis.filter(function(k){return sc[k]!=null})
+        .concat(Object.keys(sc).filter(function(k){return axis.indexOf(k)<0}));
+      var lim=RESULT_MIN[r.mode], mx=RESULT_MAX[r.mode];
+      var tot=ks.reduce(function(a,k){return a+(+sc[k]||0)},0);
       html+='<div style="padding:10px 0;border-bottom:1px solid var(--line2)">'+
         '<div style="display:flex;gap:7px;align-items:baseline"><b style="font-size:14px">'+esc(r.exam)+'</b>'+
-        '<span class="pill">'+esc(r.mode)+'式</span><span class="sm num" style="margin-left:auto">'+esc(r.date)+'</span></div>'+
+        '<span class="pill">'+esc(r.mode)+'式</span>'+
+        (mx?'<span class="pill num">'+tot+'/'+(mx*axis.length)+'</span>':'')+
+        '<span class="sm num" style="margin-left:auto">'+esc(r.date)+'</span>'+
+        '<button class="x" data-delres="'+esc(r.id||"")+'">×</button></div>'+
         '<div class="sm num" style="margin-top:5px">'+ks.map(function(k){
-          var v=r.scores[k];
-          return esc(k)+' <b style="color:'+(v<=1?"var(--bad)":"var(--ink)")+'">'+v+'</b>'}).join("　")+'</div></div>';
+          var v=sc[k];
+          return esc(k)+' <b style="color:'+(lim&&v<lim?"var(--bad)":"var(--ink)")+'">'+v+'</b>'}).join("　")+'</div></div>';
     });
-    html+='<div class="hint">科目別の弱点は、来週の科目を選ぶときの材料に。</div></div>';
+    html+='<div class="hint">赤は科目別基準点割れ（選択式3点未満・択一式4点未満）。救済は見ていません。'+
+      '<br>科目別の弱点は、来週の科目を選ぶときの材料に。入力は記録タブの最下段から。</div></div>';
   }
   return html;
 }
@@ -1666,7 +1724,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.34</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.35</div>';
   return html;
 }
 
@@ -1711,7 +1769,7 @@ document.addEventListener("click",function(ev){
     "[data-toggledone],[data-togglenolap],[data-submit],[data-openy],[data-openm],[data-opend],[data-del],[data-addtm],[data-deltm],"+
     "[data-addty],[data-delty],[data-tyq],[data-tyh],[data-addsub],[data-delsub],[data-subh],"+
     "[data-addmat],[data-delmat],[data-matq],[data-math],[data-addms],[data-delms],"+
-    "[data-export],[data-import],[data-gran],[data-axis],[data-theme],[data-gradtoggle],"+
+    "[data-export],[data-import],[data-gran],[data-axis],[data-rmode],[data-raddall],[data-delres],[data-theme],[data-gradtoggle],"+
     "[data-pal],[data-setcolor],[data-addtt],[data-deltt],[data-wptoggle]");
   if(!el)return;
   var d=el.dataset;
@@ -1735,6 +1793,11 @@ document.addEventListener("click",function(ev){
     save();render();return}
   if(d.planv){planWeek=d.planv;render();return}
   if(d.planreset){S.weekPlanNext=null;save();render();return}
+  if(d.rmode){R.mode=d.rmode;R.scores={};render();return}
+  if(d.raddall){addResult();return}
+  if(d.delres!==undefined&&d.delres){
+    S.results=S.results.filter(function(x){return x.id!==d.delres});
+    save();render();return}
   if(d.gran){statGran=d.gran;render();return}
   if(d.axis){statAxis=d.axis;render();return}
   if(d.theme){S.config.theme=d.theme;save();render();return}
@@ -1814,6 +1877,8 @@ document.addEventListener("click",function(ev){
 document.addEventListener("change",function(ev){
   var el=ev.target,d=el.dataset;
   if(el.id==="fileIn"&&el.files[0]){doImport(el.files[0]);return}
+  if(d.rf){R[d.rf]=el.value;return}
+  if(d.rs!==undefined){R.scores[d.rs]=el.value.replace(/[^0-9]/g,"");el.value=R.scores[d.rs];return}
   if(d.wt!==undefined){ if(el.value)S.weekTemplate[d.wt]=el.value; else delete S.weekTemplate[d.wt];
     save();render();return}
   if(d.f&&d.blk!==undefined){var tt=ttById(planKind);
@@ -1836,6 +1901,8 @@ document.addEventListener("change",function(ev){
 document.addEventListener("input",function(ev){
   var el=ev.target,d=el.dataset;
   if(d.week){S.week[d.week]=el.value;save();return}
+  if(d.rf){R[d.rf]=el.value;return}
+  if(d.rs!==undefined){R.scores[d.rs]=el.value.replace(/[^0-9]/g,"");el.value=R.scores[d.rs];return}
   if(d.ttn!==undefined){var t0=ttById(d.ttn);if(t0)t0.name=el.value;save();return}
   if(d.ms){var m=S.milestones.filter(function(x){return x.id===d.ms})[0];if(m){m[d.f]=el.value;save()}return}
   if(d.msx){var m2=S.milestones.filter(function(x){return x.id===d.msx})[0];if(m2){m2[d.f]=el.value;save()}return}
@@ -1887,6 +1954,23 @@ function submit(mode){
   /* セレクトを回しただけでは動かさない。保存が通った瞬間だけ覚える */
   S.lastRec={subjectId:F.subjectId,typeId:F.typeId};
   F.loaded=""; save(); render();
+}
+function addResult(){
+  var name=(R.exam||"").trim();
+  if(!name){alert("試験名を入れてください。");return}
+  var subs=RESULT_SUBJECTS[R.mode]||[], mx=RESULT_MAX[R.mode]||0, sc={}, any=false, over=[];
+  subs.forEach(function(sb){
+    var raw=R.scores[sb];
+    if(raw==null||raw==="")return;
+    var v=+raw; sc[sb]=v; any=true;
+    if(mx&&v>mx)over.push(sb);
+  });
+  if(!any){alert("科目の得点を1つ以上入れてください。");return}
+  /* 満点超えは打ち間違いの可能性が高いので、保存前に一度止める */
+  if(over.length&&!confirm(over.join("・")+" が満点("+mx+"点)を超えています。このまま記録しますか。"))return;
+  S.results.push({id:uid(),exam:name,date:R.date||todayISO(),mode:R.mode,scores:sc});
+  R={exam:"",date:R.date||todayISO(),mode:R.mode,scores:{}};
+  save();render();
 }
 function doExport(){
   var blob=new Blob([JSON.stringify(Object.assign({app:"sharoushi-study-manager",version:VER},S),null,2)],{type:"application/json"});
