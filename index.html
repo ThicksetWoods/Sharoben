@@ -173,7 +173,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.35
+   しゃろべん記録 v6.36
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -803,8 +803,10 @@ function prioritySubjects(){
   return arr;
 }
 function minutesOn(iso){var s=0;S.records.forEach(function(r){if(r.date===iso)s+=r.minutes||0});return s}
-/* ノルマの分母は周回ベースなので、分子からも「周回に数えない」を外す */
-function problemsOn(iso){var s=0;S.records.forEach(function(r){if(r.date===iso&&!r.nolap)s+=r.problems||0});return s}
+/* 今日タブのリングは「今日どれだけ手を動かしたか」の計器。
+   復習も「その他」もテキストも、解いた数はすべて数える。
+   残り問題数と器の「済」は計画ベースのままなので、そちらとは意図的にズレる */
+function problemsOn(iso){var s=0;S.records.forEach(function(r){if(r.date===iso)s+=r.problems||0});return s}
 function totalMinutes(){var s=0,st=S.config.startDate;
   S.records.forEach(function(r){if(!st||r.date>=st)s+=r.minutes||0});return s}
 
@@ -1181,7 +1183,8 @@ function vToday(){
       '<text x="41" y="'+(46-(17-pctFS)*0.35).toFixed(1)+'" text-anchor="middle" font-size="'+pctFS+
       '" font-weight="800" fill="var(--ink)" class="num">'+pct+'</text>'+
     '</svg><div><div class="t1">MS：今日のノルマ</div>'+
-    '<div class="t2 num">'+pt+' / '+(dq==null?"—":dq)+' 問　・　'+fmtHM(mt)+'</div></div></div></div>';
+    '<div class="t2 num">'+pt+' / '+(dq==null?"—":dq)+' 問　・　'+fmtHM(mt)+'</div>'+
+    '<div class="t2" style="font-size:11.5px;color:var(--faint);margin-top:2px">解いた数はすべて計上（復習・その他も）</div></div></div></div>';
 
   html+=vesselCard("today");
 
@@ -1724,7 +1727,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.35</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.36</div>';
   return html;
 }
 
