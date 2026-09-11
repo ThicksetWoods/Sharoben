@@ -173,7 +173,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.36
+   しゃろべん記録 v6.37
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -992,7 +992,7 @@ function typeChips(d,iso,withActual,w){
     if(withActual){
       var got=solvedOn(iso,id);
       if(wq&&wq.lapDone)body='<b class="num ok">完了</b>';
-      else if(rst!=null)body='<b class="num'+(rst===0?" ok":"")+'">'+rst+'</b>'+
+      else if(rst!=null)body='<b class="num'+(rst===0?" ok":"")+'">残'+rst+'</b>'+
         '<s class="dsg num">済'+got+'</s>';
       else if(got)body='<s class="dsg num">済'+got+'</s>';
     }else if(n!=null){
@@ -1111,11 +1111,43 @@ function todayVessel(ws,t,cur){
   html+='<div class="tiles two">'+
     tile(mn?fmtHM(mn):"—","","今日の確保時間")+
     paceTile(wq&&mn?Math.round(mn*60/wq):null,"1問の持ち時間")+'</div>';
+  html+=weekSummary(ws);
   html+='<div class="hint">'+esc(gapNote)+'<br>'+
     '<b>設計</b>＝1周ぶん ÷ 週内の該当日数（固定）。週の組み方が期限に合っているかを、MSの配分と比べるための数字です。<br>'+
     'チップの<b>太字</b>＝今日のノルマ（今の周の残り ÷ 今週の残り該当日数）。記録を入れると減ります。<b>済</b>＝今日解いた数。'+
     '目標周回に届いた教材は、その週はもう0問（完了）になります。</div></div>';
   return html;
+}
+/* 今日タブの器の下に置く週ぶんのまとめ。計画タブの器の下半分と同じ数字 */
+function weekSummary(ws){
+  var totMin=0,totQ=0,anyQ=false;
+  WEEK_ORDER.forEach(function(d,i){
+    totMin+=ttMinutes(ttForDow(d));
+    var q=weekQuotaOn(addD(ws,i));
+    if(q!=null){totQ+=q;anyQ=true}
+  });
+  var h='<div class="row" style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">'+
+    '<span class="nm" style="font-size:12px;font-weight:700;color:var(--sub);letter-spacing:.06em">今週の器</span>'+
+    '<span class="sm num">'+md(ws)+' – '+md(addD(ws,6))+'</span></div>';
+  h+='<div class="tiles">'+
+    tile(totMin?fmtHM(totMin):"—","","今週の確保時間")+
+    tile(anyQ?totQ:"—","問","今週のノルマ")+
+    paceTile(anyQ&&totQ&&totMin?Math.round(totMin*60/totQ):null,"1問の持ち時間（週平均）")+'</div>';
+  var wq=weekQuota().filter(function(r){return r.quota});
+  if(curSubjects().length&&wq.length){
+    wq.forEach(function(r){
+      h+='<div class="row"><span class="dot" style="background:'+r.color+'"></span>'+
+        '<span class="nm">'+esc(r.name)+'</span>'+
+        '<span class="sm num">'+r.days+'日</span>'+
+        '<span class="pill num">'+(r.lap!=null?r.lap+"問／周":"周ぶん未設定")+'</span>'+
+        '<span class="num sm" style="min-width:38px;text-align:right">'+
+          (r.perDay!=null?"設計"+r.perDay:"—")+'</span>'+
+        '<span class="num" style="font-size:13px;min-width:48px;text-align:right;font-weight:700;color:'+
+          (r.lapDone?"var(--good)":"var(--ink)")+'">'+
+          (r.lapDone?"完了":(r.perDayRest!=null?"残"+r.perDayRest:"—"))+'</span></div>';
+    });
+  }
+  return h;
 }
 function tile(v,u,k){return '<div class="tile"><div class="v num">'+esc(v)+
   (u?'<span class="u">'+esc(u)+'</span>':'')+'</div><div class="k">'+esc(k)+'</div></div>'}
@@ -1397,13 +1429,13 @@ function vRec(){
       '</div></div>'+
     '<label class="f"><span>メモ（次回の引き継ぎ）</span><input class="inp" data-f="memo" value="'+esc(F.memo)+'" placeholder="例：次は312番から"></label>'+
     '<button class="toggle'+(noLap?" on":"")+'" data-togglenolap="1" style="margin-bottom:8px">'+
-      (noLap?"✓ 周回に数えない":"周回に数える")+'</button>'+
+      (noLap?"✓ 予想問題数に乗せない":"予想問題数に乗せる")+'</button>'+
     (noLap?'':'<button class="toggle'+(F.done?" on":"")+'" data-toggledone="1">'+
       (F.done?"✓ この周を完了にする":"この周は継続中")+'</button>')+
     '<div class="hint">いま '+esc(sName(F.subjectId))+'・'+esc(tName(F.typeId))+' は '+lapNo+'周目'+
       (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。'+
-      (noLap?'<br><b>この記録は周に積みません。</b>残り問題数・次の周の予測・今日のノルマから外れ、'+
-             '時間統計とヒートマップ、履歴の問題数にだけ残ります。復習ぶんはこちらへ。'
+      (noLap?'<br><b>この記録は周に積みません。</b>次の周の予測と残り問題数、器のノルマから外れます。'+
+             '今日のリング・時間統計・ヒートマップ・履歴には残ります。周の途中で挟んだ復習はこちらへ。'
             :'<br>細切れに解いた日も、夜にアプリの累計を写すだけで足ります。')+
       (ex?'<br><b style="color:var(--warn)">この日のこの'+(noLap?"「数えない」":"")+
           '記録は既にあります。合算は時間を足し、上書きは時間を置き換えます。問題数はどちらも上書きです。</b>':'')+
@@ -1455,7 +1487,7 @@ function vRec(){
             '<span class="nm">'+esc(sName(r.subjectId))+' <span class="sm">'+esc(tName(r.typeId))+'</span></span>'+
             (r.problems?'<span class="pill num">'+r.problems+'問</span>':'')+
             (r.minutes?'<span class="pill num">'+fmtHMs(r.minutes)+'</span>':'')+
-            (r.nolap?'<span class="pill">数えない</span>':'')+
+            (r.nolap?'<span class="pill">予想外</span>':'')+
             (r.done?'<span class="pill" style="color:var(--good);border-color:var(--good)">完了</span>':'')+
             '<button class="x" data-del="'+r.id+'">×</button></div>';
           if(r.memo)html+='<div class="sm" style="padding:0 0 9px 74px;color:var(--faint)">'+esc(r.memo)+'</div>';
@@ -1727,7 +1759,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.36</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.37</div>';
   return html;
 }
 
