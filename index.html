@@ -178,7 +178,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.38
+   しゃろべん記録 v6.39
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -188,7 +188,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
    依存ライブラリなし・完全オフライン・単一HTML
    ===================================================================== */
 var KEY="ssm-v5-state";          /* 既存データを引き継ぐため v5 のキーのまま */
-var VER=12;
+var VER=13;
 
 /* ---------- utils ---------- */
 var uid=function(){return Math.random().toString(36).slice(2,10)};
@@ -1193,6 +1193,15 @@ function toast(msg){
     var e=document.getElementById("toast"); if(e)e.remove();
   },6000);
 }
+/* 累計から今回ぶんを引いて見せる。保存前に見えないと、電卓を信用しないのと同じ */
+function cumPrevText(base,raw){
+  var v=String(raw==null?"":raw).replace(/[^0-9]/g,"");
+  if(v==="")return "この教材は日累計モードです。すでに記録済み "+base+"問。";
+  var d=(+v)-base;
+  if(d<0)return '<b style="color:var(--bad)">累計が記録済み '+base+'問を下回っています（'+d+
+    '問）。順番か数字を確認してください。</b>';
+  return '→ 今回ぶん <b style="color:var(--ink)">'+d+'問</b>（累計 '+v+' − 記録済み '+base+'）';
+}
 function tile(v,u,k){return '<div class="tile"><div class="v num">'+esc(v)+
   (u?'<span class="u">'+esc(u)+'</span>':'')+'</div><div class="k">'+esc(k)+'</div></div>'}
 
@@ -1209,6 +1218,18 @@ var planKind=null;
 /* 履歴は今日を開いた状態から。たたむ操作が入ればそちらが優先される */
 var recOpenY=todayISO().slice(0,4), recOpenM=todayISO().slice(0,7), recOpenD=todayISO();
 var statGran="week", statAxis="subject", palOpen=null;
+/* 設定タブのブロック開閉。データではないのでバックアップには入れない */
+var setOpen=(function(){try{return JSON.parse(localStorage.getItem("ssm-v6-setopen"))||{}}catch(e){return {}}})();
+function saveSetOpen(){try{localStorage.setItem("ssm-v6-setopen",JSON.stringify(setOpen))}catch(e){}}
+/* 起動時は閉じたところから。中身は開いたときだけ組み立てる */
+function setCard(key,title,bodyFn){
+  var open=!!setOpen[key];
+  return '<div class="card">'+
+    '<button data-setblk="'+esc(key)+'" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left">'+
+      '<span class="sm" style="width:11px;color:var(--faint)">'+(open?"▾":"▸")+'</span>'+
+      '<h2 style="margin:0;flex:1">'+esc(title)+'</h2></button>'+
+    (open?'<div style="margin-top:13px">'+bodyFn()+'</div>':'')+'</div>';
+}
 var planWeek="cur";   /* 計画タブで今どちらの週を編集しているか。保存しない */
 
 function go(t){tab=t;planWeek="cur";   /* 計画タブを離れたら今週に戻す */
@@ -1442,9 +1463,12 @@ function vRec(){
   var ex=edRec?null:recFor(F.date,F.subjectId,F.typeId,F.nolap,lapNo);
   var sig=edRec?("edit|"+F.editId)
                :(F.date+"|"+F.subjectId+"|"+F.typeId+"|"+(F.nolap?1:0)+"|"+lapNo);
+  /* 編集中は常に実数。入力のときだけ教材の設定に従う */
+  var cum=!edRec&&cumOn(F.typeId);
+  var base=cumBase(F.date,F.typeId,ex?ex.id:null);
   if(F.loaded!==sig){
     F.loaded=sig;
-    if(ex){ F.problems=String(ex.problems||"");
+    if(ex){ F.problems=String(cum?(base+(ex.problems||0)):(ex.problems||""));
       F.times=[ex.minutes?pad(Math.floor(ex.minutes/60))+pad(ex.minutes%60):""];
       F.done=!!ex.done; F.memo=ex.memo||"";
     }else if(!edRec){ F.problems="";F.times=[""];F.done=false;F.memo=""; }
@@ -1467,8 +1491,16 @@ function vRec(){
         visT.map(function(ty){return '<option value="'+esc(ty.id)+'"'+(F.typeId===ty.id?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
       '</select></label>'+
     '</div>'+
-    '<label class="f"><span>解いた問題数（その日の累計をそのまま）</span>'+
-      '<input class="inp num" inputmode="numeric" data-f="problems" value="'+esc(F.problems)+'" placeholder="アプリに出ている数字"></label>'+
+    '<div style="margin-bottom:12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px">'+
+        '<span style="font-size:12px;color:var(--sub)">'+
+          (cum?"その日の累計（アプリの数字をそのまま）":"解いた問題数（この記録ぶん）")+'</span>'+
+        (edRec?'':'<button class="pill'+(cum?" b":"")+'" data-togglecum="1">日累計 '+(cum?"ON":"OFF")+'</button>')+
+      '</div>'+
+      '<input class="inp num" inputmode="numeric" data-f="problems" value="'+esc(F.problems)+'" placeholder="'+
+        (cum?"アプリのカレンダーの数字":"問題数")+'">'+
+      (cum?'<div class="hint" id="cumPrev" style="margin-top:6px">'+cumPrevText(base,F.problems)+'</div>':'')+
+    '</div>'+
     '<div style="margin-bottom:12px">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'+
         '<span style="font-size:12px;color:var(--sub)">学習時間 HHMM</span>'+
@@ -1491,7 +1523,10 @@ function vRec(){
        (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。')+
       (noLap?'<br><b>この記録は周に積みません。</b>次の周の予測と残り問題数、器のノルマから外れます。'+
              '今日のリング・時間統計・ヒートマップ・履歴には残ります。周の途中で挟んだ復習はこちらへ。'
-            :'<br>細切れに解いた日も、夜にアプリの累計を写すだけで足ります。')+
+            :(cum?'<br>問題数の欄にはアプリのカレンダーの数字をそのまま。'+
+                   '同じ日の同じ教材にすでに入れたぶんを引いて記録します。'+
+                   '<b>解いた順に記録してください。</b>'
+                  :'<br>問題数の欄には、この記録ぶんの実数を入れてください。'))+
       (ex?'<br><b style="color:var(--warn)">この日・この周の'+(noLap?"「乗せない」":"")+
           '記録は既にあります。合算は時間を足し、上書きは時間を置き換えます。問題数はどちらも上書きです。</b>':'')+
       '</div>'+
@@ -1716,7 +1751,7 @@ function palRow(kind,id,cur){
 function vSet(){
   var html='<div class="head"><div><div class="eyebrow">マスタとデータ</div><h1>設定</h1></div></div>';
 
-  html+='<div class="card"><h2>期日と周期</h2>'+
+  html+=setCard("dates","期日と周期",function(){return ''+
     '<div class="g2">'+
     '<label class="f"><span>起算日</span><input type="date" class="inp" data-cfg="startDate" value="'+esc(S.config.startDate)+'"></label>'+
     '<label class="f"><span>受験日</span><input type="date" class="inp" data-cfg="examDate" value="'+esc(S.config.examDate)+'"></label>'+
@@ -1728,91 +1763,111 @@ function vSet(){
     '</div><div class="hint">締切は「マイルストーン設定日 − 予備日」。周期は「最終周回から何日空いたら赤くするか」の閾値。'+
     '差分の警告は、今日タブで「MSのノルマ」と「週のノルマ」が何％ズレたら赤くするかです。'+
     '<br>持ち時間の警告は、1問あたりの秒数がこれを下回ったら赤くします。科目を束ねた週に詰め込みすぎていないかの検知用で、'+
-    '配分は変えません。赤くなったら曜日の教材を手で散らしてください。0で無効。</div></div>';
+    '配分は変えません。赤くなったら曜日の教材を手で散らしてください。0で無効。</div>';
+  });
 
   /* テーマ */
-  html+='<div class="card"><h2>テーマ</h2>';
-  Object.keys(THEMES).forEach(function(k){
-    var th=THEMES[k], on=S.config.theme===k;
-    html+='<button class="choice'+(on?" on":"")+'" data-theme="'+k+'" style="display:flex;align-items:center;gap:10px">'+
-      '<span style="width:34px;height:20px;border-radius:6px;flex:none;border:1px solid var(--line);background:'+th.grad+'"></span>'+
-      esc(th.name)+(on?'<span class="pill b" style="margin-left:auto">使用中</span>':'')+'</button>';
+  html+=setCard("theme","テーマ",function(){
+    var h='';
+    Object.keys(THEMES).forEach(function(k){
+      var th=THEMES[k], on=S.config.theme===k;
+      h+='<button class="choice'+(on?" on":"")+'" data-theme="'+k+'" style="display:flex;align-items:center;gap:10px">'+
+        '<span style="width:34px;height:20px;border-radius:6px;flex:none;border:1px solid var(--line);background:'+th.grad+'"></span>'+
+        esc(th.name)+(on?'<span class="pill b" style="margin-left:auto">使用中</span>':'')+'</button>';
+    });
+    h+='<button class="toggle'+(S.config.gradient?" on":"")+'" data-gradtoggle="1" style="margin-top:6px">'+
+      (S.config.gradient?"✓ 背景に階調を敷く":"背景はフラット")+'</button>'+
+      '<div class="hint">階調はページ背景だけに掛かります。カードとタブバーは無地のままです。'+
+      'ヒートマップの4色と、超過の赤・達成の緑は、意味を持つ色なのでテーマでは変わりません。</div>';
+    return h;
   });
-  html+='<button class="toggle'+(S.config.gradient?" on":"")+'" data-gradtoggle="1" style="margin-top:6px">'+
-    (S.config.gradient?"✓ 背景に階調を敷く":"背景はフラット")+'</button>'+
-    '<div class="hint">階調はページ背景だけに掛かります。カードとタブバーは無地のままです。'+
-    'ヒートマップの4色と、超過の赤・達成の緑は、意味を持つ色なのでテーマでは変わりません。</div></div>';
 
   /* 教材種別 */
-  html+='<div class="card"><h2>教材種別</h2>';
-  S.types.forEach(function(ty,i){
-    html+='<div class="row" style="'+(ty.hidden?"opacity:.5":"")+'">'+
-      '<button class="dotb" data-pal="type" data-pid="'+esc(ty.id)+'" style="background:'+ty.color+'"></button>'+
-      '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(ty.name)+'" data-ty="'+esc(ty.id)+'" data-f="name">'+
-      '<button class="pill'+(ty.quota?" b":"")+'" data-tyq="'+esc(ty.id)+'">'+(ty.quota?"ノルマ":"対象外")+'</button>'+
-      '<button class="pill'+(ty.hidden?"":" b")+'" data-tyh="'+esc(ty.id)+'">'+(ty.hidden?"非表示":"表示")+'</button>'+
-      '<button class="x" data-delty="'+esc(ty.id)+'">×</button></div>'+palRow("type",ty.id,ty.color);
+  html+=setCard("types","教材種別",function(){
+    var h='';
+    S.types.forEach(function(ty,i){
+      h+='<div class="row" style="'+(ty.hidden?"opacity:.5":"")+'">'+
+        '<button class="dotb" data-pal="type" data-pid="'+esc(ty.id)+'" style="background:'+ty.color+'"></button>'+
+        '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(ty.name)+'" data-ty="'+esc(ty.id)+'" data-f="name">'+
+        '<button class="pill'+(ty.cum?" b":"")+'" data-tycum="'+esc(ty.id)+'">'+(ty.cum?"日累計":"実数")+'</button>'+
+        '<button class="pill'+(ty.quota?" b":"")+'" data-tyq="'+esc(ty.id)+'">'+(ty.quota?"ノルマ":"対象外")+'</button>'+
+        '<button class="pill'+(ty.hidden?"":" b")+'" data-tyh="'+esc(ty.id)+'">'+(ty.hidden?"非表示":"表示")+'</button>'+
+        '<button class="x" data-delty="'+esc(ty.id)+'">×</button></div>'+palRow("type",ty.id,ty.color);
+    });
+    h+='<button class="add" data-addty="1" style="margin-top:8px">＋ 教材種別を追加</button>'+
+      '<div class="hint">「ノルマ」＝残問題数と優先度の計算に入る。「非表示」＝記録の選択肢と優先度から外れるが、'+
+      '過去の記録・時間統計・ヒートマップには残る。改名しても統計はそのまま追随します。'+
+      '記録が紐づいた種別は削除できません（非表示にしてください）。'+
+      '<br>「日累計」＝記録タブでアプリのカレンダーの累計をそのまま入れる教材。'+
+      '同じ日の同じ教材にすでに入れたぶんを引いて記録します。記録タブ側のトグルと同じ設定です。</div>';
+    return h;
   });
-  html+='<button class="add" data-addty="1" style="margin-top:8px">＋ 教材種別を追加</button>'+
-    '<div class="hint">「ノルマ」＝残問題数と優先度の計算に入る。「非表示」＝記録の選択肢と優先度から外れるが、'+
-    '過去の記録・時間統計・ヒートマップには残る。改名しても統計はそのまま追随します。'+
-    '記録が紐づいた種別は削除できません（非表示にしてください）。</div></div>';
 
   /* 科目 */
-  html+='<div class="card"><h2>科目</h2>';
-  S.subjects.forEach(function(s){
-    html+='<div class="row" style="'+(s.hidden?"opacity:.5":"")+'">'+
-      '<button class="dotb" data-pal="subject" data-pid="'+esc(s.id)+'" style="background:'+s.color+'"></button>'+
-      '<input class="inp num" style="width:52px;padding:8px 8px" value="'+esc(s.code)+'" data-sub="'+esc(s.id)+'" data-f="code">'+
-      '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(s.name)+'" data-sub="'+esc(s.id)+'" data-f="name">'+
-      '<button class="pill'+(s.hidden?"":" b")+'" data-subh="'+esc(s.id)+'">'+(s.hidden?"非表示":"表示")+'</button>'+
-      '<button class="x" data-delsub="'+esc(s.id)+'">×</button></div>'+palRow("subject",s.id,s.color);
+  html+=setCard("subjects","科目",function(){
+    var h='';
+    S.subjects.forEach(function(s){
+      h+='<div class="row" style="'+(s.hidden?"opacity:.5":"")+'">'+
+        '<button class="dotb" data-pal="subject" data-pid="'+esc(s.id)+'" style="background:'+s.color+'"></button>'+
+        '<input class="inp num" style="width:52px;padding:8px 8px" value="'+esc(s.code)+'" data-sub="'+esc(s.id)+'" data-f="code">'+
+        '<input class="inp" style="flex:1;padding:8px 10px" value="'+esc(s.name)+'" data-sub="'+esc(s.id)+'" data-f="name">'+
+        '<button class="pill'+(s.hidden?"":" b")+'" data-subh="'+esc(s.id)+'">'+(s.hidden?"非表示":"表示")+'</button>'+
+        '<button class="x" data-delsub="'+esc(s.id)+'">×</button></div>'+palRow("subject",s.id,s.color);
+    });
+    h+='<button class="add" data-addsub="1" style="margin-top:8px">＋ 科目を追加</button>'+
+      '<div class="hint">色のドットをタップするとパレットが開きます。統計グラフの科目別の色にそのまま使われます。</div>';
+    return h;
   });
-  html+='<button class="add" data-addsub="1" style="margin-top:8px">＋ 科目を追加</button>'+
-    '<div class="hint">色のドットをタップするとパレットが開きます。統計グラフの科目別の色にそのまま使われます。</div></div>';
 
   /* 教材 */
   var shown=S.materials.filter(function(m){return !m.hidden&&!tHidden(m.typeId)});
   var hid=S.materials.filter(function(m){return m.hidden||tHidden(m.typeId)});
-  html+='<div class="card"><h2>教材（表示'+shown.length+'／非表示'+hid.length+'）</h2>';
-  S.materials.forEach(function(m,i){
-    var q=isQuota(m), hd=!!m.hidden, byType=tHidden(m.typeId);
-    html+='<div style="border:1px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:9px;background:var(--inpbg);'+
-      ((hd||byType)?"opacity:.5":"")+'">'+
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'+
-        '<span class="dot" style="background:'+tColor(m.typeId)+'"></span>'+
-        '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="subjectId">'+
-          S.subjects.map(function(s){return '<option value="'+esc(s.id)+'"'+(m.subjectId===s.id?" selected":"")+'>'+esc(s.name)+'</option>'}).join("")+
-        '</select>'+
-        '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="typeId">'+
-          S.types.map(function(ty){return '<option value="'+esc(ty.id)+'"'+(m.typeId===ty.id?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
-        '</select>'+
-        '<button class="x" data-delmat="'+i+'">×</button>'+
-      '</div>'+
-      '<div style="display:flex;align-items:center;gap:8px">'+
-        '<label style="flex:1"><span class="sm">目標周回</span>'+
-        '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.targetLaps)+'" data-mat="'+i+'" data-f="targetLaps"></label>'+
-        '<label style="flex:1"><span class="sm">1周目問題数</span>'+
-        '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.lap1Problems)+'" data-mat="'+i+'" data-f="lap1Problems" placeholder="—"></label>'+
-        '<button class="toggle'+(q?" on":"")+'" style="flex:1;padding:9px 4px;font-size:11.5px;margin-top:16px" data-matq="'+i+'">'+
-          (q?"ノルマ":"対象外")+'</button>'+
-        '<button class="toggle'+(hd?" on":"")+'" style="flex:1;padding:9px 4px;font-size:11.5px;margin-top:16px" data-math="'+i+'">'+
-          (hd?"非表示":(byType?"種別で非表示":"表示"))+'</button>'+
-      '</div></div>';
+  html+=setCard("materials","教材（表示"+shown.length+"／非表示"+hid.length+"）",function(){
+    var h='';
+    S.materials.forEach(function(m,i){
+      var q=isQuota(m), hd=!!m.hidden, byType=tHidden(m.typeId);
+      h+='<div style="border:1px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:9px;background:var(--inpbg);'+
+        ((hd||byType)?"opacity:.5":"")+'">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'+
+          '<span class="dot" style="background:'+tColor(m.typeId)+'"></span>'+
+          '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="subjectId">'+
+            S.subjects.map(function(s){return '<option value="'+esc(s.id)+'"'+(m.subjectId===s.id?" selected":"")+'>'+esc(s.name)+'</option>'}).join("")+
+          '</select>'+
+          '<select class="inp" style="flex:1;padding:8px 26px 8px 10px;font-size:13.5px" data-mat="'+i+'" data-f="typeId">'+
+            S.types.map(function(ty){return '<option value="'+esc(ty.id)+'"'+(m.typeId===ty.id?" selected":"")+'>'+esc(ty.name)+'</option>'}).join("")+
+          '</select>'+
+          '<button class="x" data-delmat="'+i+'">×</button>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<label style="flex:1"><span class="sm">目標周回</span>'+
+          '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.targetLaps)+'" data-mat="'+i+'" data-f="targetLaps"></label>'+
+          '<label style="flex:1"><span class="sm">1周目問題数</span>'+
+          '<input class="inp num" style="padding:8px 10px;text-align:center" inputmode="numeric" value="'+esc(m.lap1Problems)+'" data-mat="'+i+'" data-f="lap1Problems" placeholder="—"></label>'+
+          '<button class="toggle'+(q?" on":"")+'" style="flex:1;padding:9px 4px;font-size:11.5px;margin-top:16px" data-matq="'+i+'">'+
+            (q?"ノルマ":"対象外")+'</button>'+
+          '<button class="toggle'+(hd?" on":"")+'" style="flex:1;padding:9px 4px;font-size:11.5px;margin-top:16px" data-math="'+i+'">'+
+            (hd?"非表示":(byType?"種別で非表示":"表示"))+'</button>'+
+        '</div></div>';
+    });
+    h+='<button class="add" data-addmat="1">＋ 教材を追加</button>'+
+      '<div class="hint">教材ごとに非表示にできます。秒トレ択一のように配信が科目ごとにずれる場合、'+
+      '届いていない科目を非表示にしておけば、優先度の上位を未着手が埋め尽くしません。</div>';
+    return h;
   });
-  html+='<button class="add" data-addmat="1">＋ 教材を追加</button>'+
-    '<div class="hint">教材ごとに非表示にできます。秒トレ択一のように配信が科目ごとにずれる場合、'+
-    '届いていない科目を非表示にしておけば、優先度の上位を未着手が埋め尽くしません。</div></div>';
 
   /* MS */
-  html+='<div class="card"><h2>マイルストーン</h2>';
-  S.milestones.slice().sort(function(a,b){return a.date<b.date?-1:1}).forEach(function(m){
-    html+='<div class="row"><input class="inp" style="width:88px;padding:8px 10px" value="'+esc(m.name)+'" data-msx="'+m.id+'" data-f="name">'+
-      '<input type="date" class="inp" style="flex:1;padding:8px 10px" value="'+esc(m.date)+'" data-msx="'+m.id+'" data-f="date">'+
-      '<button class="x" data-delms="'+m.id+'">×</button></div>';
+  html+=setCard("ms","マイルストーン",function(){
+    var h='';
+    S.milestones.slice().sort(function(a,b){return a.date<b.date?-1:1}).forEach(function(m){
+      h+='<div class="row"><input class="inp" style="width:88px;padding:8px 10px" value="'+esc(m.name)+'" data-msx="'+m.id+'" data-f="name">'+
+        '<input type="date" class="inp" style="flex:1;padding:8px 10px" value="'+esc(m.date)+'" data-msx="'+m.id+'" data-f="date">'+
+        '<button class="x" data-delms="'+m.id+'">×</button></div>';
+    });
+    h+='<button class="add" data-addms="1" style="margin-top:8px">＋ マイルストーンを追加</button>';
+    return h;
   });
-  html+='<button class="add" data-addms="1" style="margin-top:8px">＋ マイルストーンを追加</button></div>';
 
+  /* データだけは常に開いたまま。月1の書き出しが、たたまれた中に隠れてはいけない */
   html+='<div class="card"><h2>データ</h2>'+
     '<button class="primary" data-export="1">バックアップを書き出す</button>'+
     '<div style="height:9px"></div>'+
@@ -1820,7 +1875,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.38</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.39</div>';
   return html;
 }
 
@@ -1856,6 +1911,17 @@ function recFor(date,sid,tid,nolap,lap){
     return r.date===date&&r.subjectId===sid&&r.typeId===tid&&
       (!!r.nolap===!!nolap)&&(lap==null||(+r.lap||1)===+lap)})[0]||null;
 }
+/* 日累計モード：教材種別ごとの設定。アプリのカレンダーが「その日の累計」しか出さない教材で使う */
+function cumOn(tid){var t=typ(tid);return !!(t&&t.cum)}
+/* 同じ日・同じ教材で、すでに記録済みの問題数。ここを引けば今回ぶんが出る。
+   科目も周も跨いで数える（アプリ側の累計がそうなっているため）。
+   「予想問題数に乗せない」ぶんもアプリの数字には含まれているので母数に入れる */
+function cumBase(date,tid,exceptId){
+  var s=0;
+  S.records.forEach(function(r){
+    if(r.date===date&&r.typeId===tid&&r.id!==exceptId)s+=r.problems||0});
+  return s;
+}
 /* その日に周を閉じた記録がいくつあるか。2つ以上なら、その日に2周終わった扱いになる */
 function doneOnDate(date,sid,tid){
   return S.records.filter(function(r){
@@ -1868,7 +1934,7 @@ function subjUsed(id){return S.records.some(function(r){return r.subjectId===id}
 document.addEventListener("click",function(ev){
   var el=ev.target.closest("[data-go],[data-sheet],[data-close],[data-pick],[data-kind],[data-addblk],[data-delblk],"+
     "[data-planv],[data-planreset],"+
-    "[data-toggledone],[data-togglenolap],[data-submit],[data-editrec],[data-editcancel],[data-openy],[data-openm],[data-opend],[data-del],[data-addtm],[data-deltm],"+
+    "[data-toggledone],[data-togglenolap],[data-submit],[data-editrec],[data-editcancel],[data-togglecum],[data-setblk],[data-tycum],[data-openy],[data-openm],[data-opend],[data-del],[data-addtm],[data-deltm],"+
     "[data-addty],[data-delty],[data-tyq],[data-tyh],[data-addsub],[data-delsub],[data-subh],"+
     "[data-addmat],[data-delmat],[data-matq],[data-math],[data-addms],[data-delms],"+
     "[data-export],[data-import],[data-gran],[data-axis],[data-rmode],[data-raddall],[data-delres],[data-theme],[data-gradtoggle],"+
@@ -1928,6 +1994,11 @@ document.addEventListener("click",function(ev){
   if(d.toggledone){F.done=!F.done;render();return}
   if(d.togglenolap){F.nolap=!F.nolap; if(F.nolap)F.done=false;
     if(!F.editId)F.loaded=""; render();return}
+  if(d.togglecum){
+    var tc=typ(F.typeId); if(!tc)return;
+    tc.cum=!tc.cum; F.problems=""; F.loaded="";   /* 意味が変わるので欄は空に戻す */
+    save();render();return}
+  if(d.setblk){setOpen[d.setblk]=!setOpen[d.setblk];saveSetOpen();render();return}
   if(d.submit){submit(d.submit);return}
   if(d.editrec){
     var er=S.records.filter(function(x){return x.id===d.editrec})[0];
@@ -1950,7 +2021,7 @@ document.addEventListener("click",function(ev){
     S.records=S.records.filter(function(r){return r.id!==d.del});
     renumberLaps();save();render();return}
 
-  if(d.addty){S.types.push({id:"t"+uid(),name:"新しい教材",color:PALETTE[S.types.length%PALETTE.length],quota:true,hidden:false});save();render();return}
+  if(d.addty){S.types.push({id:"t"+uid(),name:"新しい教材",color:PALETTE[S.types.length%PALETTE.length],quota:true,hidden:false,cum:false});save();render();return}
   if(d.delty){
     if(typeUsed(d.delty)){alert("この種別には記録があります。削除できません。「非表示」にしてください。");return}
     if(S.materials.some(function(m){return m.typeId===d.delty})&&
@@ -1964,6 +2035,7 @@ document.addEventListener("click",function(ev){
         if(!pl[k].length)delete pl[k]});
     });
     save();render();return}
+  if(d.tycum){var tcm=typ(d.tycum);if(tcm)tcm.cum=!tcm.cum;F.loaded="";save();render();return}
   if(d.tyq){var ty=typ(d.tyq);if(ty)ty.quota=!ty.quota;save();render();return}
   if(d.tyh){var ty2=typ(d.tyh);if(ty2)ty2.hidden=!ty2.hidden;save();render();return}
 
@@ -2041,7 +2113,16 @@ document.addEventListener("input",function(ev){
       box.style.color=sum?"var(--ink)":"var(--faint)";
     }
     return}
-  if(d.f&&["problems","memo"].indexOf(d.f)>=0&&d.blk===undefined){F[d.f]=el.value;return}
+  if(d.f&&["problems","memo"].indexOf(d.f)>=0&&d.blk===undefined){
+    F[d.f]=el.value;
+    if(d.f==="problems"){
+      var pv=document.getElementById("cumPrev");
+      if(pv&&!F.editId&&cumOn(F.typeId)){
+        var exr=recFor(F.date,F.subjectId,F.typeId,F.nolap,nextLapNo(F.subjectId,F.typeId));
+        pv.innerHTML=cumPrevText(cumBase(F.date,F.typeId,exr?exr.id:null),el.value);
+      }
+    }
+    return}
 });
 
 function submit(mode){
@@ -2066,6 +2147,16 @@ function submit(mode){
   }
   var lapNo=nextLapNo(F.subjectId,F.typeId);
   var ex=recFor(F.date,F.subjectId,F.typeId,F.nolap,lapNo);
+  if(cumOn(F.typeId)){
+    /* 入力は「その日の累計」。すでに記録済みのぶんを引いて、この記録ぶんにする */
+    var bs=cumBase(F.date,F.typeId,ex?ex.id:null);
+    if(p<bs){
+      alert("入力した累計 "+p+"問 が、同じ日・同じ教材の記録済み "+bs+"問 を下回っています。\n"+
+            "解いた順に記録しているか、数字を確認してください。");
+      return;
+    }
+    p=p-bs;
+  }
   if(ex&&mode==="merge"){
     ex.minutes=(ex.minutes||0)+mi;      /* 時間だけ足す */
     ex.problems=p;                      /* 問題数はアプリの累計をそのまま置く */
