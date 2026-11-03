@@ -166,6 +166,11 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 .sheet{width:100%;max-width:520px;margin:0 auto;background:var(--bg);border-radius:20px 20px 0 0;
   padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto}
 .sheet h3{font-size:17px;font-weight:800;margin:0 0 14px}
+
+/* toast */
+.toast{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top));z-index:80;
+  max-width:496px;margin:0 auto;background:var(--panel);color:var(--panelink);border-radius:13px;
+  padding:12px 15px;font-size:13px;line-height:1.55;box-shadow:0 6px 20px rgba(20,22,26,.22)}
 </style>
 </head>
 <body>
@@ -173,7 +178,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <div class="tabbar" id="tabbar"></div>
 <script>
 /* =====================================================================
-   しゃろべん記録 v6.37
+   しゃろべん記録 v6.38
    - 科目/教材種別を id 参照に（改名しても統計が追随）
    - 非表示フラグ（種別・教材の2粒度）
    - 時間テンプレートの汎用化（曜日ごとに割り当て）
@@ -183,7 +188,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
    依存ライブラリなし・完全オフライン・単一HTML
    ===================================================================== */
 var KEY="ssm-v5-state";          /* 既存データを引き継ぐため v5 のキーのまま */
-var VER=11;
+var VER=12;
 
 /* ---------- utils ---------- */
 var uid=function(){return Math.random().toString(36).slice(2,10)};
@@ -439,6 +444,7 @@ function fill(){
     S.week[k]=(Array.isArray(v)?v:(v?[v]:[])).filter(function(id){return !!subj(id)});
   });
   if(!S.lastRec)S.lastRec={subjectId:"",typeId:""};
+  renumberLaps();
   if(!S.results)S.results=[];
   fixResultKeys(S.results);
   syncWeek();
@@ -532,10 +538,37 @@ function effDL(iso){return addD(iso,-spare())}
 function cyclePeriod(){return Math.max(1,+S.config.cyclePeriod||70)}
 
 /* ---------- laps ---------- */
+/* 同じ日に2周ぶん入ることがあるので、日付のあとは周番号で分ける。
+   周番号が同じなら、周を閉じる記録を最後に回す（従来の挙動） */
+function recOrder(a,b){
+  if(a.date!==b.date)return a.date<b.date?-1:1;
+  var la=+a.lap||0, lb=+b.lap||0;
+  if(la!==lb)return la-lb;
+  return (a.done?1:0)-(b.done?1:0);
+}
+/* 保存されている周番号を、実際の周の切れ目に合わせて振り直す。
+   並べ替えは現行の規則のままなので、画面に出ている切れ目は動かない */
+function renumberLaps(){
+  var g={};
+  S.records.forEach(function(r){
+    var k=r.subjectId+"|"+r.typeId; (g[k]=g[k]||[]).push(r);
+  });
+  Object.keys(g).forEach(function(k){
+    var n=1;
+    g[k].slice().sort(recOrder).forEach(function(r){
+      r.lap=n;
+      if(r.done&&!r.nolap)n++;   /* 周を閉じた次の記録から番号が上がる */
+    });
+  });
+}
+/* 次に作る記録が属する周の番号 */
+function nextLapNo(sid,tid){
+  return lapSegments(S.records,sid,tid).length+(openSeg(sid,tid)?0:1);
+}
 function lapSegments(recs,sid,tid){
   /* 「周回に数えない」記録は周の集計に入れない。残り問題数も次周の予測もここが源流 */
   var rows=recs.filter(function(r){return r.subjectId===sid&&r.typeId===tid&&!r.nolap})
-    .slice().sort(function(a,b){return a.date===b.date?((a.done?1:0)-(b.done?1:0)):(a.date<b.date?-1:1)});
+    .slice().sort(recOrder);
   var segs=[],cur=null;
   rows.forEach(function(r){
     if(!cur)cur={problems:0,minutes:0,done:false,first:null,last:null};
@@ -1149,6 +1182,17 @@ function weekSummary(ws){
   }
   return h;
 }
+/* 保存のあとに一度だけ出して消える知らせ。居座らせると壁紙になる */
+var toastT=null;
+function toast(msg){
+  var old=document.getElementById("toast"); if(old)old.remove();
+  if(toastT)clearTimeout(toastT);
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="toast" id="toast">'+esc(msg)+'</div>');
+  toastT=setTimeout(function(){
+    var e=document.getElementById("toast"); if(e)e.remove();
+  },6000);
+}
 function tile(v,u,k){return '<div class="tile"><div class="v num">'+esc(v)+
   (u?'<span class="u">'+esc(u)+'</span>':'')+'</div><div class="k">'+esc(k)+'</div></div>'}
 
@@ -1375,7 +1419,7 @@ function vPlan(){
 }
 
 /* ---------- 記録 ---------- */
-var F={date:"",subjectId:"",typeId:"",problems:"",times:[""],done:false,nolap:false,memo:"",loaded:""};
+var F={date:"",subjectId:"",typeId:"",problems:"",times:[""],done:false,nolap:false,memo:"",loaded:"",editId:""};
 /* 模試・本試験の入力欄。保存はしない（記録タブを離れると消える） */
 var R={exam:"",date:"",mode:"選択",scores:{}};
 function vRec(){
@@ -1390,20 +1434,29 @@ function vRec(){
     F.typeId=(typ(lr.typeId)&&!typ(lr.typeId).hidden?lr.typeId:"")||(visT[0]||{}).id||"";
   if(!F.times||!F.times.length)F.times=[""];
   var op=openSeg(F.subjectId,F.typeId);
-  var lapNo=lapSegments(S.records,F.subjectId,F.typeId).length+(op?0:1);
+  /* 編集中は住所で探さず、そのレコードを直に指す */
+  var edRec=F.editId?S.records.filter(function(r){return r.id===F.editId})[0]:null;
+  if(F.editId&&!edRec)F.editId="";
+  var lapNo=edRec?(+edRec.lap||1):nextLapNo(F.subjectId,F.typeId);
   var noLap=!!F.nolap;
-  var ex=recFor(F.date,F.subjectId,F.typeId,F.nolap);
-  var sig=F.date+"|"+F.subjectId+"|"+F.typeId+"|"+(F.nolap?1:0);
+  var ex=edRec?null:recFor(F.date,F.subjectId,F.typeId,F.nolap,lapNo);
+  var sig=edRec?("edit|"+F.editId)
+               :(F.date+"|"+F.subjectId+"|"+F.typeId+"|"+(F.nolap?1:0)+"|"+lapNo);
   if(F.loaded!==sig){
     F.loaded=sig;
     if(ex){ F.problems=String(ex.problems||"");
       F.times=[ex.minutes?pad(Math.floor(ex.minutes/60))+pad(ex.minutes%60):""];
       F.done=!!ex.done; F.memo=ex.memo||"";
-    }else{ F.problems="";F.times=[""];F.done=false;F.memo=""; }
+    }else if(!edRec){ F.problems="";F.times=[""];F.done=false;F.memo=""; }
   }
   var tsum=F.times.reduce(function(a,s){return a+parseHHMM(s)},0);
 
-  var html='<div class="head"><div><div class="eyebrow">数字ふたつと、チェックひとつ</div><h1>記録</h1></div></div>';
+  var html='<div class="head"><div><div class="eyebrow">'+
+    (edRec?"履歴から選んだ1件を直しています":"数字ふたつと、チェックひとつ")+'</div><h1>'+
+    (edRec?"編集":"記録")+'</h1></div></div>';
+  if(edRec)html+='<div class="warnbox"><b>編集中</b>　'+esc(md(edRec.date))+'・'+
+    esc(sName(edRec.subjectId))+'／'+esc(tName(edRec.typeId))+'（'+(+edRec.lap||1)+'周目）'+
+    '<br>日付も科目も変えられます。同じ日に同じ教材の記録があっても、別の記録として並びます。</div>';
   html+='<div class="card">'+
     '<label class="f"><span>日付</span><input type="date" class="inp" data-f="date" value="'+esc(F.date)+'"></label>'+
     '<div class="g2">'+
@@ -1432,18 +1485,23 @@ function vRec(){
       (noLap?"✓ 予想問題数に乗せない":"予想問題数に乗せる")+'</button>'+
     (noLap?'':'<button class="toggle'+(F.done?" on":"")+'" data-toggledone="1">'+
       (F.done?"✓ この周を完了にする":"この周は継続中")+'</button>')+
-    '<div class="hint">いま '+esc(sName(F.subjectId))+'・'+esc(tName(F.typeId))+' は '+lapNo+'周目'+
-      (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。'+
+    '<div class="hint">'+(edRec?'この記録は '+esc(sName(edRec.subjectId))+'・'+esc(tName(edRec.typeId))+
+        ' の '+(+edRec.lap||1)+'周目のぶんです。'
+      :'いま '+esc(sName(F.subjectId))+'・'+esc(tName(F.typeId))+' は '+lapNo+'周目'+
+       (op?'（この周ここまで '+op.problems+'問）':'（新しい周）')+'。')+
       (noLap?'<br><b>この記録は周に積みません。</b>次の周の予測と残り問題数、器のノルマから外れます。'+
              '今日のリング・時間統計・ヒートマップ・履歴には残ります。周の途中で挟んだ復習はこちらへ。'
             :'<br>細切れに解いた日も、夜にアプリの累計を写すだけで足ります。')+
-      (ex?'<br><b style="color:var(--warn)">この日のこの'+(noLap?"「数えない」":"")+
+      (ex?'<br><b style="color:var(--warn)">この日・この周の'+(noLap?"「乗せない」":"")+
           '記録は既にあります。合算は時間を足し、上書きは時間を置き換えます。問題数はどちらも上書きです。</b>':'')+
       '</div>'+
-    '<div style="margin-top:14px">'+(ex
-      ?'<div class="g2"><button class="primary" data-submit="merge">時間を合算</button>'+
-       '<button class="ghost" style="width:100%;padding:15px 0;font-size:15.5px;font-weight:700" data-submit="over">上書きする</button></div>'
-      :'<button class="primary" data-submit="new">記録する</button>')+'</div>'+
+    '<div style="margin-top:14px">'+(edRec
+      ?'<button class="primary" data-submit="update">この記録を更新</button>'+
+       '<button class="ghost" style="width:100%;margin-top:9px" data-editcancel="1">編集をやめる</button>'
+      :(ex
+        ?'<div class="g2"><button class="primary" data-submit="merge">時間を合算</button>'+
+         '<button class="ghost" style="width:100%;padding:15px 0;font-size:15.5px;font-weight:700" data-submit="over">上書きする</button></div>'
+        :'<button class="primary" data-submit="new">記録する</button>'))+'</div>'+
   '</div>';
 
   /* 履歴：年 → 月 → 日 → 明細 */
@@ -1484,18 +1542,21 @@ function vRec(){
         D.rows.forEach(function(r){
           html+='<div class="row" style="padding-left:54px">'+
             '<span class="dot" style="background:'+tColor(r.typeId)+'"></span>'+
-            '<span class="nm">'+esc(sName(r.subjectId))+' <span class="sm">'+esc(tName(r.typeId))+'</span></span>'+
+            '<span class="nm">'+esc(sName(r.subjectId))+' <span class="sm">'+esc(tName(r.typeId))+'</span>'+
+              '<span class="sm num" style="margin-left:6px">'+(+r.lap||1)+'周目</span></span>'+
             (r.problems?'<span class="pill num">'+r.problems+'問</span>':'')+
             (r.minutes?'<span class="pill num">'+fmtHMs(r.minutes)+'</span>':'')+
             (r.nolap?'<span class="pill">予想外</span>':'')+
             (r.done?'<span class="pill" style="color:var(--good);border-color:var(--good)">完了</span>':'')+
+            '<button class="x" data-editrec="'+r.id+'" style="font-size:15px">✎</button>'+
             '<button class="x" data-del="'+r.id+'">×</button></div>';
           if(r.memo)html+='<div class="sm" style="padding:0 0 9px 74px;color:var(--faint)">'+esc(r.memo)+'</div>';
         });
       });
     });
   });
-  html+='<div class="hint">年をたたむと全部たたまれます。非表示にした教材の記録もここには残ります。</div></div>';
+  html+='<div class="hint">年をたたむと全部たたまれます。非表示にした教材の記録もここには残ります。'+
+    '<br>✎ で上の欄に読み込んで直せます。日付も科目も変えられます。</div></div>';
 
   /* 模試・本試験の得点。日々の正答率とは別の棚 */
   var subs=RESULT_SUBJECTS[R.mode]||[];
@@ -1759,7 +1820,7 @@ function vSet(){
     '<input type="file" id="fileIn" accept=".json" style="display:none">'+
     '<div class="hint">このブラウザに自動保存されます。v5 のバックアップを読み込むと、自動で v6 の形式に変換します。'+
     '月に一度は書き出してください。</div></div>';
-  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.37</div>';
+  html+='<div class="hint" style="text-align:center;margin-bottom:8px">しゃろべん記録 v6.38</div>';
   return html;
 }
 
@@ -1789,10 +1850,16 @@ function showSheet(kind){
 function closeSheet(){sheet=null;var e=document.getElementById("sheetbg");if(e)e.remove()}
 
 /* ---------- guards ---------- */
-/* 同じ日・同じ教材でも、数える／数えないは別レコードとして共存する */
-function recFor(date,sid,tid,nolap){
+/* 同じ日・同じ教材でも、数える／数えない、そして周が違えば別レコードとして共存する */
+function recFor(date,sid,tid,nolap,lap){
   return S.records.filter(function(r){
-    return r.date===date&&r.subjectId===sid&&r.typeId===tid&&(!!r.nolap===!!nolap)})[0]||null;
+    return r.date===date&&r.subjectId===sid&&r.typeId===tid&&
+      (!!r.nolap===!!nolap)&&(lap==null||(+r.lap||1)===+lap)})[0]||null;
+}
+/* その日に周を閉じた記録がいくつあるか。2つ以上なら、その日に2周終わった扱いになる */
+function doneOnDate(date,sid,tid){
+  return S.records.filter(function(r){
+    return r.date===date&&r.subjectId===sid&&r.typeId===tid&&r.done&&!r.nolap}).length;
 }
 function typeUsed(id){return S.records.some(function(r){return r.typeId===id})}
 function subjUsed(id){return S.records.some(function(r){return r.subjectId===id})}
@@ -1801,7 +1868,7 @@ function subjUsed(id){return S.records.some(function(r){return r.subjectId===id}
 document.addEventListener("click",function(ev){
   var el=ev.target.closest("[data-go],[data-sheet],[data-close],[data-pick],[data-kind],[data-addblk],[data-delblk],"+
     "[data-planv],[data-planreset],"+
-    "[data-toggledone],[data-togglenolap],[data-submit],[data-openy],[data-openm],[data-opend],[data-del],[data-addtm],[data-deltm],"+
+    "[data-toggledone],[data-togglenolap],[data-submit],[data-editrec],[data-editcancel],[data-openy],[data-openm],[data-opend],[data-del],[data-addtm],[data-deltm],"+
     "[data-addty],[data-delty],[data-tyq],[data-tyh],[data-addsub],[data-delsub],[data-subh],"+
     "[data-addmat],[data-delmat],[data-matq],[data-math],[data-addms],[data-delms],"+
     "[data-export],[data-import],[data-gran],[data-axis],[data-rmode],[data-raddall],[data-delres],[data-theme],[data-gradtoggle],"+
@@ -1859,13 +1926,29 @@ document.addEventListener("click",function(ev){
   if(d.addtm){F.times.push("");render();return}
   if(d.deltm){F.times.splice(+d.deltm,1);if(!F.times.length)F.times=[""];render();return}
   if(d.toggledone){F.done=!F.done;render();return}
-  if(d.togglenolap){F.nolap=!F.nolap; if(F.nolap)F.done=false; F.loaded=""; render();return}
+  if(d.togglenolap){F.nolap=!F.nolap; if(F.nolap)F.done=false;
+    if(!F.editId)F.loaded=""; render();return}
   if(d.submit){submit(d.submit);return}
+  if(d.editrec){
+    var er=S.records.filter(function(x){return x.id===d.editrec})[0];
+    if(!er)return;
+    F.editId=er.id; F.date=er.date; F.subjectId=er.subjectId; F.typeId=er.typeId;
+    F.problems=String(er.problems||""); 
+    F.times=[er.minutes?pad(Math.floor(er.minutes/60))+pad(er.minutes%60):""];
+    F.done=!!er.done; F.nolap=!!er.nolap; F.memo=er.memo||"";
+    F.loaded="edit|"+er.id;
+    window.scrollTo(0,0); render(); return}
+  if(d.editcancel){
+    F.editId=""; F.loaded=""; F.problems=""; F.times=[""]; F.done=false; F.memo="";
+    render(); return}
 
   if(d.openy!==undefined&&d.openy){recOpenY=recOpenY===d.openy?null:d.openy;render();return}
   if(d.openm!==undefined&&d.openm){recOpenM=recOpenM===d.openm?null:d.openm;render();return}
   if(d.opend!==undefined&&d.opend){recOpenD=recOpenD===d.opend?null:d.opend;render();return}
-  if(d.del){S.records=S.records.filter(function(r){return r.id!==d.del});save();render();return}
+  if(d.del){
+    if(F.editId===d.del){F.editId="";F.loaded=""}
+    S.records=S.records.filter(function(r){return r.id!==d.del});
+    renumberLaps();save();render();return}
 
   if(d.addty){S.types.push({id:"t"+uid(),name:"新しい教材",color:PALETTE[S.types.length%PALETTE.length],quota:true,hidden:false});save();render();return}
   if(d.delty){
@@ -1931,7 +2014,8 @@ document.addEventListener("change",function(ev){
     }
     return}
   if(d.f&&["date","subjectId","typeId","problems","memo"].indexOf(d.f)>=0&&!d.mat&&!d.sub&&!d.ty&&!d.msx){
-    F[d.f]=el.value; if(d.f!=="problems"&&d.f!=="memo"){F.loaded="";render()} return}
+    F[d.f]=el.value;
+    if(d.f!=="problems"&&d.f!=="memo"){ if(!F.editId)F.loaded=""; render() } return}
 });
 document.addEventListener("input",function(ev){
   var el=ev.target,d=el.dataset;
@@ -1966,7 +2050,22 @@ function submit(mode){
   var p=+String(F.problems).replace(/[^0-9]/g,"")||0;
   var mi=(F.times||[]).reduce(function(a,s){return a+parseHHMM(s)},0);
   if(!p&&!mi&&!F.done){alert("問題数か時間を入れてください。");return}
-  var ex=recFor(F.date,F.subjectId,F.typeId,F.nolap);
+  /* 編集は住所を使わず、そのレコードを直に書き換える */
+  if(mode==="update"&&F.editId){
+    var er=S.records.filter(function(r){return r.id===F.editId})[0];
+    if(!er){alert("その記録は見つかりませんでした。");F.editId="";F.loaded="";render();return}
+    var osid=er.subjectId, otid=er.typeId, odate=er.date;
+    er.date=F.date; er.subjectId=F.subjectId; er.typeId=F.typeId;
+    er.problems=p; er.minutes=mi; er.done=!!F.done; er.nolap=!!F.nolap;
+    er.memo=(F.memo||"").trim();
+    renumberLaps();
+    F.editId=""; F.loaded=""; save(); render();
+    warnDupDone(F.subjectId,F.typeId,F.date);
+    if(osid!==F.subjectId||otid!==F.typeId||odate!==F.date)warnDupDone(osid,otid,odate);
+    return;
+  }
+  var lapNo=nextLapNo(F.subjectId,F.typeId);
+  var ex=recFor(F.date,F.subjectId,F.typeId,F.nolap,lapNo);
   if(ex&&mode==="merge"){
     ex.minutes=(ex.minutes||0)+mi;      /* 時間だけ足す */
     ex.problems=p;                      /* 問題数はアプリの累計をそのまま置く */
@@ -1974,21 +2073,29 @@ function submit(mode){
     S.lastRec={subjectId:F.subjectId,typeId:F.typeId};
     save();
     /* 合算後に時間欄を残すと、もう一度押したぶんが二重に足される */
+    renumberLaps();
     F.times=[""]; F.problems=String(ex.problems||"");
-    F.loaded=F.date+"|"+F.subjectId+"|"+F.typeId+"|"+(F.nolap?1:0);
-    render(); return;
+    F.loaded=F.date+"|"+F.subjectId+"|"+F.typeId+"|"+(F.nolap?1:0)+"|"+(+ex.lap||1);
+    render(); warnDupDone(F.subjectId,F.typeId,F.date); return;
   }
   if(ex){ ex.problems=p; ex.minutes=mi; ex.done=!!F.done; ex.memo=(F.memo||"").trim(); }
   else{
-    var lap=lapSegments(S.records,F.subjectId,F.typeId).length;
-    var op=openSeg(F.subjectId,F.typeId);
     S.records.unshift({id:uid(),date:F.date,subjectId:F.subjectId,typeId:F.typeId,
-      lap:op?lap:lap+1,problems:p,wrong:0,minutes:mi,done:!!F.done,nolap:!!F.nolap,
+      lap:lapNo,problems:p,wrong:0,minutes:mi,done:!!F.done,nolap:!!F.nolap,
       memo:(F.memo||"").trim(),lapTotal:null});
   }
+  renumberLaps();
   /* セレクトを回しただけでは動かさない。保存が通った瞬間だけ覚える */
   S.lastRec={subjectId:F.subjectId,typeId:F.typeId};
   F.loaded=""; save(); render();
+  warnDupDone(F.subjectId,F.typeId,F.date);
+}
+/* 同じ日に完了が2つ以上並んだら、保存の直後に一度だけ知らせる */
+function warnDupDone(sid,tid,date){
+  var c=doneOnDate(date,sid,tid);
+  if(c<2)return;
+  toast(md(date)+"　"+sName(sid)+"・"+tName(tid)+" に完了が"+c+"つあります（"+c+"周として数えます）。"+
+    "1日に"+c+"周終えた日なら、このままで正しい表示です。");
 }
 function addResult(){
   var name=(R.exam||"").trim();
